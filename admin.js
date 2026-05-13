@@ -2083,13 +2083,66 @@ async function saveParametres() {
 }
 
 // === ENTREPRISES (super-admin) ===
+// Calcule le MRR (revenu mensuel recurrent) d'une entreprise selon sa formule/cycle/status
+function calculateMRR(e) {
+  if (!e || e.plan === 'founder') return 0;
+  if (e.subscription_status !== 'active') return 0; // trialing = pas encore facturé
+  if (e.formule === 'premium' && e.cycle === 'mensuel') return 579;
+  if (e.formule === 'standard' && e.cycle === 'mensuel') return 79;
+  if (e.formule === 'standard' && e.cycle === 'annuel') return 758 / 12;
+  return 0;
+}
+
+async function loadPlatformStats() {
+  // Fetches un-scoped (service_role donc bypass RLS) pour avoir les stats de TOUTES les entreprises
+  try {
+    const ymThis = new Date().toISOString().slice(0, 7);
+    const ymPrev = (() => { const d = new Date(); d.setMonth(d.getMonth() - 1); return d.toISOString().slice(0, 7); })();
+    const [cliR, recR, cmdR] = await Promise.all([
+      sb.from('clients').select('entreprise_id'),
+      sb.from('recettes').select('entreprise_id'),
+      sb.from('commandes').select('entreprise_id, montant, semaine_du, statut')
+    ]);
+    const stats = {};
+    DATA.entreprises.forEach(e => {
+      stats[e.id] = { clients: 0, recettes: 0, commandes: 0, cmdMois: 0, caMois: 0, lastCmd: null };
+    });
+    (cliR.data || []).forEach(c => { if (stats[c.entreprise_id]) stats[c.entreprise_id].clients++; });
+    (recR.data || []).forEach(r => { if (stats[r.entreprise_id]) stats[r.entreprise_id].recettes++; });
+    (cmdR.data || []).forEach(c => {
+      const s = stats[c.entreprise_id]; if (!s) return;
+      s.commandes++;
+      const isMois = (c.semaine_du || '').startsWith(ymThis);
+      if (isMois) {
+        s.cmdMois++;
+        if (c.statut === 'Confirmée') s.caMois += Number(c.montant || 0);
+      }
+      if (!s.lastCmd || c.semaine_du > s.lastCmd) s.lastCmd = c.semaine_du;
+    });
+    DATA.platformStats = stats;
+    return stats;
+  } catch (e) {
+    return DATA.platformStats || {};
+  }
+}
+
+// Genere une barre de progression compacte usage / max avec couleur selon %
+function usageBar(used, max, label) {
+  const pct = max > 0 ? Math.min(100, Math.round(used / max * 100)) : 0;
+  const color = pct >= 90 ? '#c62828' : pct >= 70 ? '#e67e22' : pct >= 40 ? '#2980b9' : '#2e7d32';
+  return `<div style="display:flex;flex-direction:column;gap:2px">
+    <div style="display:flex;justify-content:space-between;font-size:10px"><span>${escapeHtml(label)}</span><span style="color:${color};font-weight:600">${used}/${max}</span></div>
+    <div style="height:4px;background:var(--bgd);border-radius:2px;overflow:hidden"><div style="width:${pct}%;height:100%;background:${color};transition:width .3s"></div></div>
+  </div>`;
+}
+
 function renderEntreprises() {
   const ents = DATA.entreprises;
-  const stats = {};
-  ents.forEach(e => { stats[e.id] = { clients: 0, recettes: 0, commandes: 0 }; });
-  DATA.clients.forEach(c => { if (stats[c.entreprise_id]) stats[c.entreprise_id].clients++; });
-  DATA.recettes.forEach(r => { if (stats[r.entreprise_id]) stats[r.entreprise_id].recettes++; });
-  DATA.commandes.forEach(c => { if (stats[c.entreprise_id]) stats[c.entreprise_id].commandes++; });
+  const stats = DATA.platformStats || {};
+  // Si pas de stats encore, on les charge en async puis on re-render
+  if (!DATA.platformStats) {
+    loadPlatformStats().then(() => renderEntreprises());
+  }
 
   const rows = ents.map(e => {
     const s = stats[e.id] || { clients: 0, recettes: 0, commandes: 0 };
@@ -2114,7 +2167,15 @@ function renderEntreprises() {
       <td>${escapeHtml(e.nom_contact || '–')}</td>
       <td><div style="font-size:12px">${formuleStr}</div>${subBadge}</td>
       <td>${activeBadge}</td>
-      <td style="font-size:12px">${s.clients} clients · ${s.recettes} recettes · ${s.commandes} commandes</td>
+      <td style="min-width:240px">
+        ${e.plan === 'founder'
+          ? `<div style="font-size:11px;color:var(--txl)">${s.clients} clientes · ${s.recettes} recettes · ${s.cmdMois} cmd ce mois</div>`
+          : `<div style="display:flex;flex-direction:column;gap:5px">
+              ${usageBar(s.clients, PLAN_LIMITS.clientes, 'Clientes')}
+              ${usageBar(s.recettes, PLAN_LIMITS.recettes, 'Recettes')}
+              ${usageBar(s.cmdMois, PLAN_LIMITS.commandes_mois, 'Cmd/mois')}
+            </div>`}
+      </td>
       <td>${escapeHtml(e.admin_email || '–')}</td>
       <td style="display:flex;gap:6px;flex-wrap:wrap">
         ${e.plan !== 'founder' ? `<button class="btn btn-ghost btn-sm" data-act="pay-link" data-id="${e.id}" title="Générer le lien de paiement Stripe">💳 Lien</button>` : ''}
@@ -2124,14 +2185,70 @@ function renderEntreprises() {
     </tr>`;
   }).join('');
 
-  showContent(`<div class="card">
+  // Agrege les usages pour les entreprises non-founder uniquement
+  const paying = ents.filter(e => e.plan !== 'founder');
+  const aggUsage = paying.reduce((acc, e) => {
+    const s = stats[e.id] || {};
+    acc.cli += (s.clients || 0);
+    acc.rec += (s.recettes || 0);
+    acc.cmd += (s.cmdMois || 0);
+    return acc;
+  }, { cli: 0, rec: 0, cmd: 0 });
+  const nb = paying.length || 1;
+  const avgCliPct = Math.round((aggUsage.cli / nb) / PLAN_LIMITS.clientes * 100);
+  const avgRecPct = Math.round((aggUsage.rec / nb) / PLAN_LIMITS.recettes * 100);
+  const avgCmdPct = Math.round((aggUsage.cmd / nb) / PLAN_LIMITS.commandes_mois * 100);
+
+  // Compte par statut subscription
+  const byStatus = { trialing: 0, active: 0, past_due: 0, canceled: 0, pending: 0 };
+  paying.forEach(e => { if (byStatus[e.subscription_status] !== undefined) byStatus[e.subscription_status]++; });
+
+  const heavyUsers = paying.filter(e => {
+    const s = stats[e.id] || {};
+    return (s.clients / PLAN_LIMITS.clientes) >= 0.8
+      || (s.recettes / PLAN_LIMITS.recettes) >= 0.8
+      || (s.cmdMois / PLAN_LIMITS.commandes_mois) >= 0.8;
+  });
+
+  showContent(`<div class="card" style="margin-bottom:18px">
+    <div class="card-head"><div class="card-tit">📊 Vue plateforme</div></div>
+    <div class="stats-row" style="margin-bottom:14px">
+      <div class="stat-card">
+        <div class="stat-val">${paying.length}</div>
+        <div class="stat-lbl">Cuisinières payantes</div>
+        <div style="font-size:11px;color:var(--txl);margin-top:4px">${byStatus.trialing} essai · ${byStatus.active} actives · ${byStatus.past_due} en retard</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val" style="color:${avgCliPct >= 80 ? '#c62828' : avgCliPct >= 50 ? '#e67e22' : '#2e7d32'}">${avgCliPct}%</div>
+        <div class="stat-lbl">Usage moyen clientes</div>
+        <div style="font-size:11px;color:var(--txl);margin-top:4px">${Math.round(aggUsage.cli / nb)} sur ${PLAN_LIMITS.clientes} max</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val" style="color:${avgRecPct >= 80 ? '#c62828' : avgRecPct >= 50 ? '#e67e22' : '#2e7d32'}">${avgRecPct}%</div>
+        <div class="stat-lbl">Usage moyen recettes</div>
+        <div style="font-size:11px;color:var(--txl);margin-top:4px">${Math.round(aggUsage.rec / nb)} sur ${PLAN_LIMITS.recettes} max</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val" style="color:${avgCmdPct >= 80 ? '#c62828' : avgCmdPct >= 50 ? '#e67e22' : '#2e7d32'}">${avgCmdPct}%</div>
+        <div class="stat-lbl">Usage moyen cmd/mois</div>
+        <div style="font-size:11px;color:var(--txl);margin-top:4px">${Math.round(aggUsage.cmd / nb)} sur ${PLAN_LIMITS.commandes_mois} max</div>
+      </div>
+    </div>
+    ${heavyUsers.length ? `<div style="background:#fff3cd;border-left:4px solid #f6c343;border-radius:10px;padding:12px 16px;font-size:13px;color:#8a6a1a">
+      ⚠️ <strong>${heavyUsers.length} cuisinière${heavyUsers.length > 1 ? 's' : ''} à >80% d'usage</strong> sur au moins une limite : ${heavyUsers.map(e => escapeHtml(e.nom_marque)).join(', ')}. Envisager un upgrade Premium ou ajuster les plafonds.
+    </div>` : `<div style="background:#e8f5e9;border-left:4px solid #2e7d32;border-radius:10px;padding:12px 16px;font-size:13px;color:#2e7d32">
+      ✓ Aucune cuisinière n'approche ses limites. Plafonds confortables.
+    </div>`}
+  </div>
+
+  <div class="card">
     <div class="card-head">
       <div class="card-tit">🏢 Entreprises <span>${ents.length}</span></div>
       <button class="btn btn-primary" id="btnNewEnt">+ Nouvelle cuisinière</button>
     </div>
-    <p style="font-size:13px;color:var(--txm);margin-bottom:14px">Crée un compte pour onboarder une nouvelle cuisinière. Génère son lien de paiement Stripe (💳) pour qu'elle saisisse sa CB et démarre son essai 7 jours.</p>
+    <p style="font-size:13px;color:var(--txm);margin-bottom:14px">Crée un compte pour onboarder une nouvelle cuisinière. La colonne "Usage" montre où chaque cuisinière en est par rapport aux limites du plan.</p>
     <div class="tbl-wrap"><table class="tbl">
-      <thead><tr><th>Cuisinière</th><th>Contact</th><th>Formule</th><th>Statut</th><th>Activité</th><th>Email</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Cuisinière</th><th>Contact</th><th>Formule</th><th>Statut</th><th>Usage</th><th>Email</th><th>Actions</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="7" class="empty">Aucune cuisinière</td></tr>'}</tbody>
     </table></div>
   </div>`);
