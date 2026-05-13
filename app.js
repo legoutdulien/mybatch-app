@@ -977,7 +977,14 @@ async function confirmerCommande(pop) {
     btn.textContent = '✓ Confirmer ma commande';
     btn.style.opacity = '1';
     btn.style.cursor = 'pointer';
-    showToast('Erreur: ' + (e.message || e), 'err');
+    const msg = (e && e.message) || String(e);
+    // Si le trigger DB rejette pour limite mensuelle, on affiche un message plus explicite
+    if (/limite atteinte/i.test(msg) || /commandes\/mois/i.test(msg)) {
+      const cuisiniere = CURRENT_BRANDING?.nom_contact || 'votre cuisiniere';
+      alert(`📦 Plafond mensuel atteint\n\nVotre cuisinière a déjà accepté le maximum de commandes pour ce mois. Contactez ${cuisiniere} ou réessayez le mois prochain.`);
+    } else {
+      showToast('Erreur: ' + msg, 'err');
+    }
   }
 }
 
