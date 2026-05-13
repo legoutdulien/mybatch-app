@@ -32,7 +32,39 @@ exports.handler = async (event) => {
   try { body = JSON.parse(event.body || '{}'); }
   catch { return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: 'Invalid JSON' }) }; }
   const entrepriseId = body.entreprise_id;
+  const accessToken = body.access_token;
   if (!entrepriseId) return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: 'entreprise_id requis' }) };
+  if (!accessToken) return { statusCode: 401, headers: corsHeaders, body: JSON.stringify({ error: 'access_token requis' }) };
+
+  // Verifie le token Supabase
+  let user;
+  try {
+    const userRes = await fetch(`${sbUrl}/auth/v1/user`, {
+      headers: { apikey: sbKey, Authorization: `Bearer ${accessToken}` }
+    });
+    if (!userRes.ok) return { statusCode: 401, headers: corsHeaders, body: JSON.stringify({ error: 'Session invalide' }) };
+    user = await userRes.json();
+  } catch (e) {
+    return { statusCode: 401, headers: corsHeaders, body: JSON.stringify({ error: 'Verification token echec' }) };
+  }
+
+  // Verifie que le caller est admin de l'entreprise OU founder
+  try {
+    const adminRes = await fetch(`${sbUrl}/rest/v1/admins_entreprise?user_id=eq.${user.id}&select=entreprise_id,entreprises(plan)`, {
+      headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` }
+    });
+    const adminLinks = await adminRes.json();
+    if (!Array.isArray(adminLinks) || adminLinks.length === 0) {
+      return { statusCode: 403, headers: corsHeaders, body: JSON.stringify({ error: 'Acces refuse — pas admin' }) };
+    }
+    const isFounder = adminLinks.some(l => l.entreprises?.plan === 'founder');
+    const ownsEntreprise = adminLinks.some(l => l.entreprise_id === entrepriseId);
+    if (!isFounder && !ownsEntreprise) {
+      return { statusCode: 403, headers: corsHeaders, body: JSON.stringify({ error: 'Acces refuse — entreprise non rattachee' }) };
+    }
+  } catch (e) {
+    return { statusCode: 500, headers: corsHeaders, body: JSON.stringify({ error: 'Verification autorisation echec : ' + e.message }) };
+  }
 
   // Lit l'entreprise depuis Supabase
   let ent;

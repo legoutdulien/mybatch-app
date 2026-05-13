@@ -21,11 +21,11 @@ async function checkPlanLimit(kind, label) {
   if (isFounder()) return true;
   const max = PLAN_LIMITS[kind];
   let q;
-  if (kind === 'recettes') q = sb.from('recettes').select('*', { count: 'exact', head: true });
-  else if (kind === 'clientes') q = sb.from('clients').select('*', { count: 'exact', head: true });
+  if (kind === 'recettes') q = sb.from('recettes').select('*', { count: 'exact', head: true }).eq('entreprise_id', CURRENT_ENTREPRISE_ID);
+  else if (kind === 'clientes') q = sb.from('clients').select('*', { count: 'exact', head: true }).eq('entreprise_id', CURRENT_ENTREPRISE_ID);
   else if (kind === 'commandes_mois') {
     const ym = new Date().toISOString().slice(0, 7);
-    q = sb.from('commandes').select('*', { count: 'exact', head: true }).gte('semaine_du', ym + '-01');
+    q = sb.from('commandes').select('*', { count: 'exact', head: true }).eq('entreprise_id', CURRENT_ENTREPRISE_ID).gte('semaine_du', ym + '-01');
   }
   if (!q) return true;
   const { count, error } = await q;
@@ -270,9 +270,9 @@ let adminRealtimeChannel = null;
 function setupRealtimeNotifs() {
   if (adminRealtimeChannel) return;
   adminRealtimeChannel = sb.channel('admin-orders')
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'commandes' }, async (payload) => {
-      // Recharge les donnees pour avoir la nouvelle commande dans DATA
-      const { data } = await sb.from('commandes').select('*').order('semaine_du', { ascending: false });
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'commandes', filter: `entreprise_id=eq.${CURRENT_ENTREPRISE_ID}` }, async (payload) => {
+      // Recharge les donnees pour avoir la nouvelle commande dans DATA (scope par entreprise)
+      const { data } = await scoped(sb.from('commandes').select('*')).order('semaine_du', { ascending: false });
       if (data) DATA.commandes = data;
       const cli = payload.new && payload.new.client_id ? getClient(payload.new.client_id) : null;
       const nom = cli ? cli.nom : 'un client';
@@ -1547,8 +1547,8 @@ async function supprimerClient(id) {
     await sb.from('clients').delete().eq('id', id);
     await adminDeleteAuthUser(id);
     const [{ data: cliData }, { data: cmdData }] = await Promise.all([
-      sb.from('clients').select('*'),
-      sb.from('commandes').select('*')
+      scoped(sb.from('clients').select('*')),
+      scoped(sb.from('commandes').select('*'))
     ]);
     if (cliData) DATA.clients = cliData;
     if (cmdData) DATA.commandes = cmdData;
@@ -1640,10 +1640,10 @@ async function supprimerSalarie(id) {
     await sb.from('commandes').update({ assigne_a_id: null }).eq('assigne_a_id', id);
     await sb.from('salaries').delete().eq('id', id);
     await adminDeleteAuthUser(id);
-    // Refetch frais depuis la DB pour eviter toute trace locale
+    // Refetch frais depuis la DB pour eviter toute trace locale (scope par entreprise)
     const [{ data: salData }, { data: cmdData }] = await Promise.all([
-      sb.from('salaries').select('*'),
-      sb.from('commandes').select('*')
+      scoped(sb.from('salaries').select('*')),
+      scoped(sb.from('commandes').select('*'))
     ]);
     if (salData) DATA.salaries = salData;
     if (cmdData) DATA.commandes = cmdData;
@@ -2039,7 +2039,7 @@ async function saveParametres() {
     instructions_paiement: paiement || null,
     logo_url: logo || null
   };
-  if (newPwd) payload.admin_password = newPwd;
+  // Note : password gere uniquement via Supabase Auth, plus stocke dans entreprises
 
   $('prmStatus').textContent = '⏳ Enregistrement...';
   try {
@@ -2161,10 +2161,12 @@ async function genererLienPaiement(entrepriseId) {
   if (!e) return;
   toast('⏳ Génération du lien de paiement...');
   try {
+    const { data: { session } } = await sbAuth.auth.getSession();
+    if (!session) throw new Error('Session perdue, reconnecte-toi');
     const r = await fetch('/.netlify/functions/stripe-checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entreprise_id: entrepriseId })
+      body: JSON.stringify({ entreprise_id: entrepriseId, access_token: session.access_token })
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || 'Erreur génération lien');
@@ -2262,7 +2264,7 @@ async function saveEntreprise() {
     payload.cycle = $('entCycle').value;
     if (!id) payload.subscription_status = 'pending';
   }
-  if (pwd) payload.admin_password = pwd;
+  // Note : on ne stocke plus le password en clair dans entreprises (Supabase Auth gere)
   if (id) payload.active = $('entActive').value === 'true';
 
   try {
