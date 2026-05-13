@@ -119,11 +119,13 @@ $$ language sql stable security definer;
 
 ### Produits configurés dans Stripe Dashboard
 
-| Formule | Cycle | Prix | Price ID |
+| Formule | Cycle | Prix | Price ID (voir env vars Netlify) |
 |---|---|---|---|
-| Standard | Mensuel | 79€ HT/mois | `price_1TRM95C6M9X6HMHEtoshE7ZD` |
-| Standard | Annuel | 758€ HT/an (-20%) | `price_1TRMDkC6M9X6HMHEC43TIBA7` |
-| Premium | Mensuel | 579€ HT/mois | `price_1TRMGCC6M9X6HMHEJTmEgT85` |
+| Standard | Mensuel | 79€ HT/mois | `STRIPE_PRICE_STANDARD_MENSUEL` |
+| Standard | Annuel | 758€ HT/an (-20%) | `STRIPE_PRICE_STANDARD_ANNUEL` |
+| Premium | Mensuel | 579€ HT/mois | `STRIPE_PRICE_PREMIUM_MENSUEL` |
+
+Les vrais Price IDs Stripe sont stockés dans les env vars Netlify pour ne pas exposer de secrets dans le repo.
 
 **Note** : Premium n'existe qu'en mensuel (pas d'annuel).
 
@@ -136,18 +138,18 @@ Premium = standard + 4h coaching visio par mois (service livré par Alizée hors
 
 ### Variables d'environnement Netlify
 
-```
-STRIPE_SECRET_KEY            = sk_live_...
-STRIPE_WEBHOOK_SECRET        = whsec_...
-STRIPE_PRICE_STANDARD_MENSUEL = price_1TRM95C6M9X6HMHEtoshE7ZD
-STRIPE_PRICE_STANDARD_ANNUEL  = price_1TRMDkC6M9X6HMHEC43TIBA7
-STRIPE_PRICE_PREMIUM_MENSUEL  = price_1TRMGCC6M9X6HMHEJTmEgT85
-PUBLIC_BASE_URL              = https://mybatch.cooking
-SUPABASE_URL                 = https://loiaubdlhkcnohtbwtxg.supabase.co
-SUPABASE_SERVICE_KEY         = service_role key
-ADMIN_PASSWORD               = (legacy, plus utilisé)
-ANTHROPIC_API_KEY            = pour ARIA
-```
+À configurer dans Netlify → Site configuration → Environment variables :
+
+- `STRIPE_SECRET_KEY` — clé secrète Stripe (préfixée selon mode)
+- `STRIPE_WEBHOOK_SECRET` — secret de signature du webhook
+- `STRIPE_PRICE_STANDARD_MENSUEL` — ID du tarif 79€/mois
+- `STRIPE_PRICE_STANDARD_ANNUEL` — ID du tarif 758€/an
+- `STRIPE_PRICE_PREMIUM_MENSUEL` — ID du tarif 579€/mois (premium n'a pas d'annuel)
+- `PUBLIC_BASE_URL` — `https://mybatch.cooking`
+- `SUPABASE_URL` — URL du projet Supabase
+- `SUPABASE_SERVICE_KEY` — service_role key Supabase
+- `ANTHROPIC_API_KEY` — pour ARIA (founder seulement)
+- `ADMIN_PASSWORD` — legacy, plus utilisé (à supprimer)
 
 ### Flow d'onboarding d'une cuisinière
 
@@ -331,4 +333,4 @@ delete from salaries where id in (select user_id from admins_entreprise);
 
 ---
 
-*Dernière mise à jour : pendant la session de mise en place Stripe — Estelle (test) a été supprimée, une entreprise "test" a été créée pour valider le checkout Stripe (UUID `f94cd706-8fbe-473b-bba6-19157cb1983f`).*
+*Dernière mise à jour : audit sécurité — RLS verifié, isolation testée, stripe-checkout protégé par auth, password en clair retiré.*
