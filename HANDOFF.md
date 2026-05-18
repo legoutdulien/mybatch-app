@@ -294,6 +294,45 @@ Le founder a status='active' à vie (badge "∞ Gratuit").
 
 Planning admin → clic 🛒 sur la commande → modale avec items cochables + bouton imprimer.
 
+### Import bulk de recettes pour une cuisinière
+
+Voir `C:\Users\visit\Documents\import_recettes_estelle.sql` pour exemple — un DO $$ ... END $$ avec upsert ingrédients via ON CONFLICT (entreprise_id, lower(nom)) puis INSERT recettes + recettes_ingredients. **Important** : depuis les triggers DB ci-dessous, les inserts recettes_ingredients sans entreprise_id sont auto-fillés depuis la recette parente.
+
+---
+
+## Triggers DB défensifs (sécurité multi-tenant)
+
+Le système a 8 triggers Postgres qui garantissent l'intégrité multi-tenant :
+
+| Table | Trigger | Action |
+|---|---|---|
+| `recettes` | `set_entreprise_id_trigger` | Refuse INSERT sans `entreprise_id` (raise exception) |
+| `ingredients` | `set_entreprise_id_trigger` | Refuse INSERT sans `entreprise_id` |
+| `commandes` | `set_entreprise_id_trigger` | Refuse INSERT sans `entreprise_id` + check limite 80 commandes/mois pour plan != founder |
+| `creneaux` | `set_entreprise_id_trigger` | Refuse INSERT sans `entreprise_id` |
+| `creneaux_template` | `set_entreprise_id_trigger` | Refuse INSERT sans `entreprise_id` |
+| `forfaits` | `set_entreprise_id_trigger` | Refuse INSERT sans `entreprise_id` |
+| `recettes_ingredients` | `ri_set_entreprise_id` | Auto-fill `entreprise_id` depuis la recette parente |
+| `commandes` | `commandes_limit_check` | Bloque INSERT si entreprise non-founder a déjà 80 commandes ce mois |
+
+Les triggers sur `clients` et `salaries` ont été retirés car le trigger Postgres `handle_new_user` insère ces lignes avec `entreprise_id` NULL (mis à jour par admin.js après). Ces 2 tables sont protégées par la logique applicative à la place.
+
+## Indexes uniques scopés par entreprise
+
+Toutes les contraintes UNIQUE multi-tenant incluent `entreprise_id` pour éviter les collisions cross-tenant :
+- `ingredients(entreprise_id, lower(nom))`
+- `creneaux_template(entreprise_id, jour, nom_slot)`
+- `creneaux(entreprise_id, semaine, slot)`
+- `admins_entreprise(user_id, entreprise_id)`
+
+L'unique global qui reste : `entreprises.slug` — volontaire car le slug = identifiant du sous-domaine.
+
+---
+
+## Tests Stripe end-to-end validés (14 mai 2026)
+
+Flow complet testé avec succès : super-admin crée entreprise → bouton 💳 Lien génère URL Stripe Checkout → saisie CB (trial 7 jours = 0€) → webhook `checkout.session.completed` reçu → entreprise passe de `pending` à `trialing` automatiquement. Annulation à la fin de période = subscription reste `trialing` jusqu'à fin du trial, puis webhook `customer.subscription.deleted` → `canceled` + `active=false`.
+
 ---
 
 ## Memory persistant (mybatch_saas)
@@ -333,4 +372,4 @@ delete from salaries where id in (select user_id from admins_entreprise);
 
 ---
 
-*Dernière mise à jour : audit sécurité — RLS verifié, isolation testée, stripe-checkout protégé par auth, password en clair retiré.*
+*Dernière mise à jour : Stripe E2E validé, 57 recettes Estelle importées, triggers défensifs DB en place (6 tables + 1 auto-fill recettes_ingredients + 1 trigger limite commandes), bug RLS recettes_ingredients fixé (entreprise_id backfill).*
