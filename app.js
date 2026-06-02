@@ -323,7 +323,10 @@ async function ouvrirCommande(idx) {
     const platIds = [cmd.plat_1_id, cmd.plat_2_id, cmd.plat_3_id, cmd.plat_4_id, cmd.plat_5_id].filter(Boolean);
     platsDetailCache = platIds.map(id => recettes.find(r => r.id === id)).filter(Boolean);
     const semLabel = cmd.semaine_du ? 'Semaine du ' + fmtDate(cmd.semaine_du) : '';
-    renderDetail({ nom: clientProfile.nom || '', semLabel, creneau: cmd.creneau || '', id: cmd.id, statut: cmd.statut || 'En attente de paiement', montant: cmd.montant ?? CURRENT_BRANDING?.montant_client_default ?? 60 });
+    // Detecte si la cliente a choisi un forfait avec courses incluses
+    const f = forfaits.find(x => x.id === cmd.forfait_id);
+    const forfaitInclutCourses = !!f?.inclut_courses;
+    renderDetail({ nom: clientProfile.nom || '', semLabel, creneau: cmd.creneau || '', id: cmd.id, statut: cmd.statut || 'En attente de paiement', montant: cmd.montant ?? CURRENT_BRANDING?.montant_client_default ?? 60, forfaitInclutCourses });
   } catch (e) {
     showToast('Erreur: ' + e.message, 'err');
   } finally {
@@ -337,8 +340,8 @@ function renderDetail(data) {
   const icone = ok
     ? '<svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>'
     : '<svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.4 0-8-3.6-8-8s3.6-8 8-8 8 3.6 8 8-3.6 8-8 8zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z"/></svg>';
-  // Si la cuisiniere fait les courses pour cette cliente, on cache l'onglet et le contenu Liste de courses
-  const showCourses = !clientProfile?.courses_par_cuisiniere;
+  // Si la cuisiniere fait les courses (soit via le forfait choisi, soit toggle legacy sur la cliente), on cache l'onglet et le contenu Liste de courses
+  const showCourses = !data.forfaitInclutCourses && !clientProfile?.courses_par_cuisiniere;
   $('detailMain').innerHTML = `
     <div class="cbanner">
       <div class="cicon">${icone}</div>
