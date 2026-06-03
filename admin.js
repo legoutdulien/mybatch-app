@@ -341,6 +341,7 @@ function renderPlanningListe() {
         </div>
       </div>
       <div class="cmd-plats">${plats.map(p => `<span class="plat-chip" data-act="see-ing" data-id="${p.id}" data-portions="${c.nombre_portions || 4}">${escapeHtml(p.nom_du_plat)}</span>`).join('') || '<span style="font-size:12px;color:var(--txl)">Aucun plat selectionne</span>'}</div>
+      ${c.message_client ? `<div style="background:#fff3cd;border-left:3px solid #f6c343;border-radius:8px;padding:10px 12px;margin-top:10px;font-size:12px;color:#6b5818"><strong style="color:#8a6a1a">💬 Message de ${escapeHtml(cli.nom || 'la cliente')} :</strong><div style="margin-top:4px;white-space:pre-wrap">${escapeHtml(c.message_client)}</div></div>` : ''}
       <div class="cmd-footer">
         <span style="font-size:12px;color:var(--txl)">Assigne a :</span>
         <select class="assign-sel" data-act="assign" data-id="${c.id}">${salOpts}</select>

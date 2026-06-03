@@ -899,6 +899,10 @@ function afficherRecap() {
         <span style="font-size:15px;font-weight:500">A votre charge</span>
         <span id="recapMontant" style="font-size:20px;font-weight:700;color:var(--vert)">${montantClient}€</span>
       </div>
+      <div style="background:#f8f4ee;border-radius:12px;padding:12px 16px;margin-bottom:16px">
+        <label for="recapMessage" style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#6b6b6b;margin-bottom:6px">💬 Message à ${escapeHtml(cuisiniereName)} (optionnel)</label>
+        <textarea id="recapMessage" rows="3" placeholder="Allergies, demande spéciale, info livraison..." style="width:100%;border:1px solid #ede7db;border-radius:8px;padding:10px;font-family:'DM Sans',sans-serif;font-size:13px;background:#fff;color:#2c2c2c;resize:vertical"></textarea>
+      </div>
       ${instructionsPaiement ? `<div style="background:#fff8e7;border-left:3px solid #f9c74f;border-radius:10px;padding:14px 16px;margin-bottom:20px">
         <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:#8a6a1a">💳 Modalité de paiement</div>
         <div style="font-size:12px;line-height:1.6;color:#5a5a3a;white-space:pre-wrap">${escapeHtml(instructionsPaiement)}</div>
@@ -950,7 +954,8 @@ async function confirmerCommande(pop) {
       plat_5_id: sel[4].id,
       nombre_portions: clientProfile?.nombre_portions || 4,
       forfait_id: forfaitSel?.id || null,
-      montant: forfaitSel?.prix ?? CURRENT_BRANDING?.montant_client_default ?? 60
+      montant: forfaitSel?.prix ?? CURRENT_BRANDING?.montant_client_default ?? 60,
+      message_client: $('recapMessage')?.value.trim() || null
     };
     const { error } = await sb.from('commandes').insert(payload);
     if (error) throw error;
