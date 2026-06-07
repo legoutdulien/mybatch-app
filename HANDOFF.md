@@ -372,4 +372,20 @@ delete from salaries where id in (select user_id from admins_entreprise);
 
 ---
 
-*Dernière mise à jour : Stripe E2E validé, 57 recettes Estelle importées, triggers défensifs DB en place (6 tables + 1 auto-fill recettes_ingredients + 1 trigger limite commandes), bug RLS recettes_ingredients fixé (entreprise_id backfill).*
+## Forfaits avec/sans courses (option par forfait, pas par client)
+
+Chaque forfait a une colonne `inclut_courses boolean`. Quand cochée :
+- L'onglet "Liste de courses" est caché du portail des clientes qui ont choisi ce forfait (la cuisinière shop pour elles)
+- Le badge "🛒 Courses à faire" jaune s'affiche sur la cmd-card du planning admin
+
+Ce setting remplace l'ancien toggle `clients.courses_par_cuisiniere` (encore présent en base pour backward compat, mais retiré de l'UI). Les cuisinières créent maintenant typiquement 2-3 forfaits : "Semaine" (sans courses), "Forfait course" (courses seules), "Semaine + Courses" (combo).
+
+## Message libre cliente sur la commande
+
+Colonne `commandes.message_client text`. Saisi par la cliente au moment du récap commande dans un textarea optionnel ("💬 Message à votre cuisinière"). Affiché côté admin dans un bloc jaune sur la cmd-card du planning si renseigné. Permet aux clientes de noter allergies, demandes spéciales, infos livraison sans devoir passer par WhatsApp.
+
+Pas encore implémenté : messagerie complète back-and-forth (à envisager quand 3+ cuisinières le demandent).
+
+---
+
+*Dernière mise à jour 4 juin 2026 : forfaits inclut_courses + message_client commande.*
