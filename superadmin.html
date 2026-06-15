@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Super-Admin · my batch</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --ink:#1A1A1A;--tx:#374151;--tx-2:#6B7280;--muted:#9CA3AF;
+  --bg:#FAF6EE;--bg-2:#F5F0E5;--line:#E5E0D5;--line-2:#D1CCC0;
+  --green:#3D6B4F;--green-pale:#E8F0E9;
+  --orange:#E8843D;--orange-2:#D26A1F;--orange-pale:#FCE8D8;--orange-soft:#F5C28E;
+  --red:#DC2626;--red-pale:#FEE2E2;
+  --blue:#2563EB;--blue-pale:#DBEAFE;
+  --r:12px;--r-lg:16px;--r-xl:24px;
+  --shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+  --shadow-lg:0 10px 30px rgba(0,0,0,.08),0 4px 10px rgba(0,0,0,.04);
+}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;font-size:14px;line-height:1.5}
+.wrap{max-width:1280px;margin:0 auto;padding:0 32px}
+
+/* HEADER */
+header{background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50}
+header .row{display:flex;align-items:center;justify-content:space-between;padding:16px 0}
+.brand{display:flex;align-items:baseline;gap:8px;text-decoration:none}
+.brand-name{font-size:22px;font-weight:800;color:var(--ink);letter-spacing:-.035em}
+.brand-name .dot{display:inline-block;width:.3em;height:.3em;border-radius:50%;background:var(--orange);margin-left:.08em;vertical-align:baseline}
+.role-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:var(--orange-pale);color:var(--orange-2);border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-left:8px}
+.role-badge::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--orange)}
+.h-actions{display:flex;gap:10px;align-items:center}
+.h-email{font-size:13px;color:var(--tx-2)}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;text-decoration:none;font-family:inherit;transition:all .15s;line-height:1}
+.btn-ghost{background:transparent;color:var(--tx);border:1px solid var(--line-2)}
+.btn-ghost:hover{border-color:var(--ink);color:var(--ink)}
+.btn-orange{background:var(--orange);color:#fff}
+.btn-orange:hover{background:var(--orange-2)}
+.btn-danger{background:var(--red);color:#fff}
+.btn-danger:hover{background:#B91C1C}
+.btn-sm{padding:6px 12px;font-size:12px}
+
+/* LOGIN OVERLAY */
+#pAuth{position:fixed;inset:0;background:linear-gradient(135deg,var(--bg) 0%,var(--bg-2) 100%);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px}
+.auth-card{background:#fff;border-radius:24px;padding:48px 40px;width:100%;max-width:420px;box-shadow:var(--shadow-lg);text-align:center}
+.auth-card h1{font-size:24px;font-weight:800;margin-bottom:8px;letter-spacing:-.025em}
+.auth-card h1 .dot{display:inline-block;width:.3em;height:.3em;border-radius:50%;background:var(--orange);margin-left:.08em;vertical-align:baseline}
+.auth-card .sub{font-size:14px;color:var(--tx-2);margin-bottom:32px}
+.auth-card .badge{display:inline-block;padding:5px 12px;background:var(--orange-pale);color:var(--orange-2);border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:24px}
+.field{margin-bottom:18px;text-align:left}
+.field label{display:block;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px}
+.field input{width:100%;padding:14px 16px;border:1.5px solid var(--line-2);border-radius:12px;font-size:14.5px;color:var(--ink);background:#fff;outline:none;font-family:inherit;transition:border-color .15s}
+.field input:focus{border-color:var(--orange)}
+.auth-err{background:var(--red-pale);color:var(--red);padding:12px;border-radius:10px;font-size:13px;margin-top:14px;display:none}
+.auth-btn{width:100%;padding:14px;background:var(--ink);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;margin-top:8px;font-family:inherit}
+.auth-btn:hover{background:#000}
+
+/* MAIN APP */
+#pApp{display:none}
+main{padding:36px 0 80px}
+
+/* KPI GRID */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:36px}
+.kpi{background:#fff;border:1px solid var(--line);border-radius:var(--r-lg);padding:24px;position:relative;overflow:hidden}
+.kpi::before{content:"";position:absolute;top:0;right:0;width:80px;height:80px;border-radius:0 0 0 100%;opacity:.08}
+.kpi.green::before{background:var(--green)}
+.kpi.orange::before{background:var(--orange)}
+.kpi.blue::before{background:var(--blue)}
+.kpi.red::before{background:var(--red)}
+.kpi .lbl{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px}
+.kpi .val{font-size:32px;font-weight:800;color:var(--ink);letter-spacing:-.025em;line-height:1}
+.kpi .val small{font-size:14px;color:var(--tx-2);font-weight:500;margin-left:4px}
+.kpi .trend{font-size:12px;margin-top:8px;color:var(--tx-2)}
+.kpi .trend.up{color:var(--green)}
+.kpi .trend.down{color:var(--red)}
+
+/* SECTION */
+.section{margin-bottom:36px}
+.section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;gap:16px;flex-wrap:wrap}
+.section-head h2{font-size:18px;font-weight:700;letter-spacing:-.01em}
+.section-head .count{color:var(--muted);font-weight:500;font-size:14px;margin-left:6px}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.search-box{position:relative;display:flex;align-items:center}
+.search-box input{padding:8px 14px 8px 36px;border:1px solid var(--line-2);border-radius:8px;font-size:13px;background:#fff;outline:none;font-family:inherit;width:240px}
+.search-box input:focus{border-color:var(--orange)}
+.search-box::before{content:"🔍";position:absolute;left:11px;font-size:13px;opacity:.5}
+.filter-chip{padding:7px 13px;border:1px solid var(--line-2);background:#fff;border-radius:999px;font-size:12px;color:var(--tx);cursor:pointer;font-family:inherit;transition:all .15s}
+.filter-chip:hover{border-color:var(--ink)}
+.filter-chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+/* ENTREPRISES LIST */
+.ent-grid{display:grid;grid-template-columns:1fr;gap:12px}
+.ent-card{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:20px 24px;display:grid;grid-template-columns:1fr auto;gap:24px;align-items:center;transition:border-color .15s}
+.ent-card:hover{border-color:var(--line-2);box-shadow:var(--shadow)}
+.ent-info h3{font-size:16px;font-weight:700;color:var(--ink);margin-bottom:4px;letter-spacing:-.01em}
+.ent-info .meta{font-size:13px;color:var(--tx-2);display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px}
+.ent-info .meta span{display:inline-flex;align-items:center;gap:5px}
+.ent-info .badges{display:flex;gap:6px;flex-wrap:wrap}
+.b{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;line-height:1}
+.b.green{background:var(--green-pale);color:var(--green)}
+.b.orange{background:var(--orange-pale);color:var(--orange-2)}
+.b.red{background:var(--red-pale);color:var(--red)}
+.b.blue{background:var(--blue-pale);color:var(--blue)}
+.b.gray{background:#F3F4F6;color:#4B5563}
+.b::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.9}
+.b.no-dot::before{display:none}
+.ent-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+/* DETAIL MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(2px)}
+.modal-overlay.on{display:flex}
+.modal{background:#fff;border-radius:var(--r-xl);max-width:680px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-lg)}
+.modal-head{padding:24px 28px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.modal-head h2{font-size:20px;font-weight:700;letter-spacing:-.015em}
+.modal-head .close{background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);padding:0;line-height:1}
+.modal-body{padding:24px 28px}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 24px;margin-bottom:24px}
+.detail-row{display:flex;flex-direction:column;gap:4px}
+.detail-row .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+.detail-row .v{font-size:14px;color:var(--ink);font-weight:500}
+.detail-row .v.mono{font-family:ui-monospace,monospace;font-size:12px;color:var(--tx)}
+.modal-foot{padding:18px 28px;background:var(--bg);border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px;border-radius:0 0 var(--r-xl) var(--r-xl)}
+
+/* ACTIVITY FEED */
+.activity{background:#fff;border:1px solid var(--line);border-radius:var(--r-lg);padding:0;overflow:hidden}
+.act-item{padding:14px 20px;border-bottom:1px solid var(--bg-2);display:flex;align-items:center;gap:14px;font-size:13.5px}
+.act-item:last-child{border-bottom:none}
+.act-item .when{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums;flex-shrink:0;width:90px}
+.act-item .ic{font-size:18px;flex-shrink:0}
+.act-item .txt{color:var(--tx);flex:1}
+.act-item .txt strong{color:var(--ink);font-weight:600}
+
+/* EMPTY/LOADING */
+.empty{padding:60px 20px;text-align:center;color:var(--muted);font-size:14px}
+.empty .ic{font-size:40px;margin-bottom:14px;opacity:.4}
+.loading{padding:40px 20px;text-align:center;color:var(--muted);font-size:13px}
+.spin{display:inline-block;width:24px;height:24px;border:2.5px solid var(--line);border-top-color:var(--orange);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:10px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* TOAST */
+.toast{position:fixed;bottom:24px;right:24px;background:var(--ink);color:#fff;padding:14px 20px;border-radius:12px;font-size:13.5px;box-shadow:var(--shadow-lg);z-index:300;display:none;align-items:center;gap:10px;max-width:380px;animation:slideIn .25s ease}
+.toast.on{display:flex}
+.toast.error{background:var(--red)}
+.toast.success{background:var(--green)}
+@keyframes slideIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+
+@media(max-width:900px){
+  .kpi-grid{grid-template-columns:repeat(2,1fr)}
+  .ent-card{grid-template-columns:1fr}
+  .ent-actions{margin-top:8px}
+  .detail-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN OVERLAY -->
+<div id="pAuth">
+  <div class="auth-card">
+    <h1>my batch<span class="dot"></span></h1>
+    <span class="badge">Super-Admin</span>
+    <p class="sub">Connectez-vous pour accéder au portail.</p>
+    <div class="field">
+      <label for="email">Email</label>
+      <input type="email" id="email" autocomplete="email" placeholder="structify.crm@gmail.com">
+    </div>
+    <div class="field">
+      <label for="password">Mot de passe</label>
+      <input type="password" id="password" autocomplete="current-password">
+    </div>
+    <button class="auth-btn" id="btnLogin">Connexion →</button>
+    <div class="auth-err" id="authErr"></div>
+  </div>
+</div>
+
+<!-- MAIN APP (post-login) -->
+<div id="pApp">
+
+  <header>
+    <div class="wrap">
+      <div class="row">
+        <a href="superadmin.html" class="brand">
+          <span class="brand-name">my batch<span class="dot"></span></span>
+          <span class="role-badge">Super-Admin</span>
+        </a>
+        <div class="h-actions">
+          <span class="h-email" id="hEmail"></span>
+          <button class="btn btn-ghost" id="btnLogout">Déconnexion</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+
+    <!-- KPI -->
+    <div class="kpi-grid">
+      <div class="kpi orange">
+        <div class="lbl">MRR estimé</div>
+        <div class="val" id="kMrr">—</div>
+        <div class="trend" id="kMrrTrend">€/mois récurrent</div>
+      </div>
+      <div class="kpi green">
+        <div class="lbl">Entreprises actives</div>
+        <div class="val" id="kActive">—</div>
+        <div class="trend" id="kActiveTrend">abonnées</div>
+      </div>
+      <div class="kpi blue">
+        <div class="lbl">En essai</div>
+        <div class="val" id="kTrial">—</div>
+        <div class="trend" id="kTrialTrend">essai 7j en cours</div>
+      </div>
+      <div class="kpi red">
+        <div class="lbl">Inactives / annulées</div>
+        <div class="val" id="kChurn">—</div>
+        <div class="trend" id="kChurnTrend">à relancer ou supprimer</div>
+      </div>
+    </div>
+
+    <!-- ENTREPRISES SECTION -->
+    <div class="section">
+      <div class="section-head">
+        <h2>Entreprises<span class="count" id="entCount"></span></h2>
+        <div class="toolbar">
+          <div class="search-box"><input type="text" id="entSearch" placeholder="Rechercher…"></div>
+          <button class="filter-chip on" data-fp="all">Toutes</button>
+          <button class="filter-chip" data-fp="active">Actives</button>
+          <button class="filter-chip" data-fp="trial">Essai</button>
+          <button class="filter-chip" data-fp="canceled">Annulées</button>
+        </div>
+      </div>
+      <div class="ent-grid" id="entGrid">
+        <div class="loading"><span class="spin"></span>Chargement…</div>
+      </div>
+    </div>
+
+    <!-- ACTIVITY -->
+    <div class="section">
+      <div class="section-head">
+        <h2>Activité récente<span class="count">7 derniers jours</span></h2>
+      </div>
+      <div class="activity" id="activity">
+        <div class="loading"><span class="spin"></span>Chargement…</div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- DETAIL MODAL -->
+<div class="modal-overlay" id="detailModal">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <h2 id="dmTitle">Détail entreprise</h2>
+        <div style="font-size:13px;color:var(--tx-2);margin-top:4px" id="dmSub"></div>
+      </div>
+      <button class="close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body" id="dmBody"></div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Fermer</button>
+      <button class="btn btn-danger btn-sm" id="dmActSuspend">Suspendre</button>
+      <button class="btn btn-orange btn-sm" id="dmActReactivate">Réactiver</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="superadmin.js"></script>
+</body>
+</html>

@@ -131,6 +131,11 @@ async function login() {
     if (authErr) throw new Error('Email ou mot de passe incorrect.');
     const r = await detectRole(auth.user.id);
     if (r.role === 'admin') {
+      // Super-admin my batch -> redirige vers le portail dedie
+      if ((auth.user.email || '').toLowerCase() === 'structify.crm@gmail.com') {
+        window.location.href = 'superadmin.html';
+        return;
+      }
       window.location.href = 'admin.html';
       return;
     }
@@ -1013,11 +1018,11 @@ function getSubdomainSlug() {
 const GENERIC_BRANDING = {
   id: null,
   slug: null,
-  nom_marque: 'Mon espace Batchcooking',
-  nom_contact: 'votre cuisiniere',
+  nom_marque: 'my batch',
+  nom_contact: 'le support my batch',
   logo_url: null,
-  couleur_principale: '#3d6b4f',
-  couleur_secondaire: '#5a8a6a'
+  couleur_principale: '#E8843D',
+  couleur_secondaire: '#3D6B4F'
 };
 
 let CURRENT_BRANDING = null;
@@ -1054,11 +1059,25 @@ function applyBranding(b) {
   if (!b) return;
   if (b.nom_marque) {
     document.title = b.nom_marque;
-    document.querySelectorAll('.llogo, .logo').forEach(el => { el.textContent = b.nom_marque; });
+    // Si on est sur le brand "my batch", on garde le logo avec dot orange (innerHTML)
+    // Sinon on remplace par le nom_marque texte
+    const isMyBatch = b.nom_marque === 'my batch' && (!b.slug || b.slug === null);
+    document.querySelectorAll('.llogo, .logo').forEach(el => {
+      if (isMyBatch) {
+        el.innerHTML = 'my batch<span class="mb-dot"></span>';
+      } else {
+        el.textContent = b.nom_marque;
+      }
+    });
   }
   if (b.nom_contact) {
-    const note = document.querySelector('#pLogin .lcard > div[style*="margin-top:20px"]');
-    if (note) note.textContent = `Probleme ? Contactez ${b.nom_contact}.`;
+    const helpNote = document.querySelector('#pLogin .lcard .l-help');
+    if (helpNote) {
+      if (b.slug) helpNote.innerHTML = `Problème de connexion ? Contactez <strong>${b.nom_contact}</strong>`;
+    } else {
+      const legacyNote = document.querySelector('#pLogin .lcard > div[style*="margin-top:20px"]');
+      if (legacyNote) legacyNote.textContent = `Probleme ? Contactez ${b.nom_contact}.`;
+    }
   }
   if (b.couleur_principale) document.documentElement.style.setProperty('--brand-primary', b.couleur_principale);
   if (b.couleur_secondaire) document.documentElement.style.setProperty('--brand-secondary', b.couleur_secondaire);
@@ -1115,7 +1134,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   const { data: { session } } = await sb.auth.getSession();
   if (session) {
     const r = await detectRole(session.user.id);
-    if (r.role === 'admin') { window.location.href = 'admin.html'; return; }
+    if (r.role === 'admin') {
+      if ((session.user.email || '').toLowerCase() === 'structify.crm@gmail.com') {
+        window.location.href = 'superadmin.html';
+        return;
+      }
+      window.location.href = 'admin.html';
+      return;
+    }
     if (r.role === 'salarie') { window.location.href = 'salarie.html'; return; }
     if (r.role === 'client') {
       clientProfile = r.data;

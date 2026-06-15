@@ -3,10 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mon espace Batchcooking</title>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<title>my batch — Connexion</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23FAF6EE'/%3E%3Ctext x='3' y='25' font-family='Inter,sans-serif' font-weight='800' font-size='24' fill='%231A1A1A' letter-spacing='-1.5'%3Emb%3C/text%3E%3Ccircle cx='26' cy='22' r='3.2' fill='%23E8843D'/%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
-:root{--brand-primary:#3d6b4f;--brand-secondary:#5a8a6a;--vert:var(--brand-primary);--vc:var(--brand-secondary);--vp:color-mix(in srgb, var(--brand-secondary) 12%, #fff);--bg:#f8f4ee;--bgd:#ede7db;--tx:#2c2c2c;--txl:#6b6b6b;--wh:#fff;--sh:0 4px 24px rgba(0,0,0,.08);--r:16px}
+:root{--brand-primary:#E8843D;--brand-secondary:#3D6B4F;--vert:var(--brand-primary);--vc:var(--brand-secondary);--vp:color-mix(in srgb, var(--brand-secondary) 12%, #fff);--bg:#FAF6EE;--bgd:#F0EBE0;--tx:#1A1A1A;--txl:#6b6b6b;--wh:#fff;--sh:0 4px 24px rgba(0,0,0,.08);--r:16px;--ink:#1A1A1A;--orange-dot:#E8843D}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);min-height:100vh}
 header{background:var(--wh);border-bottom:1px solid var(--bgd);padding:0 32px;display:flex;align-items:center;justify-content:space-between;height:68px;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(0,0,0,.04)}
@@ -16,18 +17,23 @@ header{background:var(--wh);border-bottom:1px solid var(--bgd);padding:0 32px;di
 .hbtn:hover{border-color:var(--vert);color:var(--vert)}
 .hbtn.green{background:var(--vert);color:#fff;border-color:var(--vert)}
 .hbtn.green:hover{background:var(--vc)}
-#pLogin{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--bg),var(--vp));padding:20px}
-.lcard{background:var(--wh);border-radius:24px;padding:48px 40px;width:100%;max-width:420px;box-shadow:var(--sh);text-align:center}
-.llogo{font-family:'Playfair Display',serif;font-size:28px;font-weight:700;color:var(--vert);margin-bottom:6px}
-.ltag{font-size:14px;color:var(--txl);margin-bottom:36px}
-.lcard h2{font-family:'Playfair Display',serif;font-size:22px;margin-bottom:28px}
-.fg{margin-bottom:18px;text-align:left}
-.fg label{display:block;font-size:12px;font-weight:500;color:var(--txl);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px}
-.fg input{width:100%;padding:14px 18px;border:1.5px solid var(--bgd);border-radius:12px;font-family:'DM Sans',sans-serif;font-size:15px;color:var(--tx);background:var(--bg);outline:none;transition:border-color .2s}
+#pLogin{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:20px;position:relative;overflow:hidden}
+#pLogin::before{content:"";position:absolute;top:-150px;left:-100px;width:400px;height:400px;background:rgba(232,132,61,0.08);border-radius:50%;z-index:0}
+#pLogin::after{content:"";position:absolute;bottom:-120px;right:-80px;width:340px;height:340px;background:rgba(61,107,79,0.08);border-radius:50%;z-index:0}
+.lcard{background:var(--wh);border-radius:24px;padding:52px 40px 44px;width:100%;max-width:420px;box-shadow:0 20px 60px rgba(26,26,26,0.08),0 2px 8px rgba(26,26,26,0.04);text-align:center;position:relative;z-index:2;border:1px solid var(--bgd)}
+.llogo{font-family:'Inter',system-ui,sans-serif;font-size:32px;font-weight:800;color:var(--ink);margin-bottom:8px;letter-spacing:-.035em;display:inline-flex;align-items:baseline;justify-content:center}
+.llogo .mb-dot{display:inline-block;width:.28em;height:.28em;border-radius:50%;background:var(--orange-dot);margin-left:.08em;vertical-align:baseline;flex-shrink:0}
+.ltag{font-size:14px;color:var(--txl);margin-bottom:36px;font-family:'Inter',sans-serif;font-weight:400}
+.lcard h2{font-family:'Inter',sans-serif;font-size:20px;margin-bottom:28px;color:var(--ink);font-weight:700;letter-spacing:-.01em}
+.fg{margin-bottom:16px;text-align:left}
+.fg label{display:block;font-size:11px;font-weight:600;color:var(--txl);margin-bottom:7px;text-transform:uppercase;letter-spacing:.08em;font-family:'Inter',sans-serif}
+.fg input{width:100%;padding:13px 16px;border:1.5px solid var(--bgd);border-radius:11px;font-family:'Inter',sans-serif;font-size:14.5px;color:var(--ink);background:var(--wh);outline:none;transition:border-color .15s,background .15s}
 .fg input:focus{border-color:var(--vert);background:var(--wh)}
-.btnLogin{width:100%;padding:15px;background:var(--vert);color:#fff;border:none;border-radius:12px;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:500;cursor:pointer;margin-top:8px}
-.btnLogin:hover{background:var(--vc)}
-.lerr{background:#fdecea;color:#c62828;padding:12px;border-radius:10px;font-size:14px;margin-top:14px;display:none}
+.btnLogin{width:100%;padding:14px;background:var(--ink);color:#fff;border:none;border-radius:11px;font-family:'Inter',sans-serif;font-size:15px;font-weight:600;cursor:pointer;margin-top:8px;transition:background .15s,transform .15s}
+.btnLogin:hover{background:#000;transform:translateY(-1px)}
+.lerr{background:#fdecea;color:#c62828;padding:12px;border-radius:10px;font-size:13.5px;margin-top:14px;display:none;font-family:'Inter',sans-serif}
+.l-help{margin-top:24px;font-size:12.5px;color:var(--txl);font-family:'Inter',sans-serif;line-height:1.55;padding-top:18px;border-top:1px solid var(--bgd)}
+.l-help strong{color:var(--ink);font-weight:600}
 #pDash{display:none}
 .main{padding:36px 32px 60px;max-width:1100px;margin:0 auto}
 .welcome{font-family:'Playfair Display',serif;font-size:28px;font-weight:600;margin-bottom:8px}
@@ -250,14 +256,14 @@ header{background:var(--wh);border-bottom:1px solid var(--bgd);padding:0 32px;di
   <svg class="login-bg-svg" style="bottom:10%;right:8%;width:110px" viewBox="0 0 100 100"><path d="M20 50 Q35 20 50 50 Q35 80 20 50 M50 50 Q65 20 80 50 Q65 80 50 50"/></svg>
   <svg class="login-bg-svg" style="top:55%;left:15%;width:70px" viewBox="0 0 100 100"><circle cx="50" cy="50" r="20"/><path d="M50 30 Q70 50 50 70 Q30 50 50 30"/></svg>
   <div class="lcard">
-    <div class="llogo">Mon espace Batchcooking</div>
-    <div class="ltag">Votre espace personnel batch cooking</div>
-    <h2>Connexion</h2>
-    <div class="fg"><label>Email</label><input type="email" id="iEmail" placeholder="votre adresse"></div>
-    <div class="fg"><label>Mot de passe</label><input type="password" id="iMdp" placeholder="••••••••"></div>
+    <div class="llogo">my batch<span class="mb-dot"></span></div>
+    <div class="ltag">L'app des batchcookeuses indépendantes</div>
+    <h2>Connexion à votre espace</h2>
+    <div class="fg"><label>Email</label><input type="email" id="iEmail" placeholder="votre@email.com" autocomplete="email"></div>
+    <div class="fg"><label>Mot de passe</label><input type="password" id="iMdp" placeholder="••••••••" autocomplete="current-password"></div>
     <button class="btnLogin" id="btnLogin">Se connecter</button>
     <div class="lerr" id="lerr"></div>
-    <div style="margin-top:20px;font-size:13px;color:var(--txl)">Probleme ? Contactez votre cuisiniere.</div>
+    <div class="l-help">Problème de connexion ? Contactez <strong>contact@mybatch.cooking</strong></div>
   </div>
 </div>
 
