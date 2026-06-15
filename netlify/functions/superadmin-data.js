@@ -55,22 +55,40 @@ exports.handler = async (event) => {
     }
     const entreprises = await entRes.json();
 
-    // Pour chaque entreprise, recup count clientes / recettes (en parallele, limite a 10 simultane)
+    // Pour chaque entreprise, recup counts + onboarding status (en parallele)
     const enrichWith = async (e) => {
       try {
-        const [cliR, recR, cmdR] = await Promise.all([
+        const [cliR, recR, cmdR, salR, totalCmdR] = await Promise.all([
           fetch(`${sbUrl}/rest/v1/clients?select=count&entreprise_id=eq.${e.id}`, { headers: { ...adminHeaders, Prefer: 'count=exact' } }),
           fetch(`${sbUrl}/rest/v1/recettes?select=count&entreprise_id=eq.${e.id}`, { headers: { ...adminHeaders, Prefer: 'count=exact' } }),
           fetch(`${sbUrl}/rest/v1/commandes?select=count&entreprise_id=eq.${e.id}&semaine_du=gte.${thirtyDaysAgo()}`, { headers: { ...adminHeaders, Prefer: 'count=exact' } }),
+          fetch(`${sbUrl}/rest/v1/salaries?select=count&entreprise_id=eq.${e.id}`, { headers: { ...adminHeaders, Prefer: 'count=exact' } }),
+          fetch(`${sbUrl}/rest/v1/commandes?select=count&entreprise_id=eq.${e.id}`, { headers: { ...adminHeaders, Prefer: 'count=exact' } }),
         ]);
         e.clients_count = parseCountHeader(cliR);
         e.recettes_count = parseCountHeader(recR);
         e.recent_commandes_count = parseCountHeader(cmdR);
+        e.salaries_count = parseCountHeader(salR);
+        e.total_commandes_count = parseCountHeader(totalCmdR);
       } catch {
         e.clients_count = 0;
         e.recettes_count = 0;
         e.recent_commandes_count = 0;
+        e.salaries_count = 0;
+        e.total_commandes_count = 0;
       }
+      // Onboarding status (checklist)
+      e.onboarding = {
+        has_recettes: e.recettes_count >= 5,        // 5 recettes pour considerer demarre
+        has_clientes: e.clients_count > 0,
+        has_commandes: e.total_commandes_count > 0,
+        has_branding: !!(e.logo_url || (e.nom_marque && e.nom_marque !== 'Mon espace Batchcooking'))
+      };
+      e.onboarding.completed_steps = Object.values(e.onboarding).filter(Boolean).length;
+      e.onboarding.total_steps = 4;
+      e.onboarding.score = Math.round((e.onboarding.completed_steps / e.onboarding.total_steps) * 100);
+      // Anciennete (jours)
+      e.age_days = e.created_at ? Math.floor((Date.now() - new Date(e.created_at).getTime()) / (24 * 60 * 60 * 1000)) : 0;
       return e;
     };
 

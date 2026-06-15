@@ -58,6 +58,28 @@ exports.handler = async (event) => {
       payload = { active: false };
     } else if (action === 'reactivate') {
       payload = { active: true };
+    } else if (action === 'trial_extend') {
+      // Etend l'essai de 7 jours a partir d'aujourd'hui (ou de la trial_ends_at existante)
+      const days = parseInt(body.days, 10) || 7;
+      // Recup l'entreprise courante pour calculer le nouveau trial_ends_at
+      const entRes = await fetch(`${sbUrl}/rest/v1/entreprises?id=eq.${encodeURIComponent(entreprise_id)}&select=trial_ends_at,subscription_status`, {
+        headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` }
+      });
+      const entData = await entRes.json();
+      const current = entData[0];
+      const now = Date.now();
+      const baseTime = current?.trial_ends_at ? Math.max(now, new Date(current.trial_ends_at).getTime()) : now;
+      const newTrialEnd = new Date(baseTime + days * 24 * 60 * 60 * 1000);
+      payload = {
+        trial_ends_at: newTrialEnd.toISOString(),
+        subscription_status: 'trialing'
+      };
+    } else if (action === 'change_plan') {
+      const newPlan = body.plan;
+      if (!['founder', 'standard'].includes(newPlan)) {
+        return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: 'Plan invalide' }) };
+      }
+      payload = { plan: newPlan };
     } else {
       return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: 'Action inconnue' }) };
     }

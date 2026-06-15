@@ -122,6 +122,39 @@ main{padding:36px 0 80px}
 .detail-row .v.mono{font-family:ui-monospace,monospace;font-size:12px;color:var(--tx)}
 .modal-foot{padding:18px 28px;background:var(--bg);border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px;border-radius:0 0 var(--r-xl) var(--r-xl)}
 
+/* CHART */
+.chart-card{background:#fff;border:1px solid var(--line);border-radius:var(--r-lg);padding:24px 28px}
+.chart-bars{display:flex;align-items:flex-end;gap:16px;height:140px;padding-bottom:24px;position:relative}
+.chart-bar{flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;height:100%;justify-content:flex-end;position:relative}
+.chart-bar .bar{width:100%;max-width:60px;background:linear-gradient(180deg,var(--orange) 0%,var(--orange-2) 100%);border-radius:6px 6px 0 0;min-height:4px;transition:height .3s ease;position:relative}
+.chart-bar .bar:hover{filter:brightness(1.05)}
+.chart-bar .v{position:absolute;top:-22px;left:50%;transform:translateX(-50%);font-size:12px;font-weight:700;color:var(--ink)}
+.chart-bar .l{font-size:11px;color:var(--tx-2);font-weight:500;text-transform:uppercase;letter-spacing:.04em;text-align:center;margin-top:4px;flex-shrink:0;line-height:1.2}
+
+/* ONBOARDING BADGES */
+.onb{display:flex;gap:5px;align-items:center;margin-top:6px}
+.onb-step{width:18px;height:18px;border-radius:50%;background:var(--bg-2);border:1.5px solid var(--line-2);font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--muted)}
+.onb-step.done{background:var(--green-pale);border-color:var(--green);color:var(--green)}
+.onb-score{margin-left:6px;font-size:11px;color:var(--tx-2);font-weight:600}
+
+/* MODAL EXTENSIONS */
+.modal-section{margin-top:24px;padding-top:24px;border-top:1px solid var(--line)}
+.modal-section h3{font-size:13px;font-weight:700;color:var(--ink);margin-bottom:14px;text-transform:uppercase;letter-spacing:.06em;display:flex;align-items:center;gap:8px}
+.modal-section h3 .ic{font-size:16px}
+.notes-area{width:100%;min-height:90px;padding:12px 14px;border:1.5px solid var(--line-2);border-radius:10px;font-family:inherit;font-size:13.5px;color:var(--ink);background:var(--bg);outline:none;resize:vertical;line-height:1.55}
+.notes-area:focus{border-color:var(--orange)}
+.notes-save{margin-top:8px;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted)}
+.stripe-list{display:flex;flex-direction:column;gap:8px}
+.stripe-item{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--bg);border-radius:8px;font-size:13px;gap:12px}
+.stripe-item .si-info{flex:1;min-width:0}
+.stripe-item .si-date{color:var(--tx-2);font-size:12px;font-variant-numeric:tabular-nums}
+.stripe-item .si-amount{font-weight:700;color:var(--ink);white-space:nowrap;font-variant-numeric:tabular-nums}
+.stripe-item.failed{background:var(--red-pale)}
+.stripe-item.failed .si-amount{color:var(--red)}
+.trial-extend-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.trial-extend-bar select{padding:7px 10px;border:1px solid var(--line-2);border-radius:8px;font-family:inherit;font-size:13px;background:#fff;outline:none}
+.empty-mini{padding:16px;text-align:center;color:var(--muted);font-size:13px;background:var(--bg);border-radius:8px}
+
 /* ACTIVITY FEED */
 .activity{background:#fff;border:1px solid var(--line);border-radius:var(--r-lg);padding:0;overflow:hidden}
 .act-item{padding:14px 20px;border-bottom:1px solid var(--bg-2);display:flex;align-items:center;gap:14px;font-size:13.5px}
@@ -218,6 +251,16 @@ main{padding:36px 0 80px}
       </div>
     </div>
 
+    <!-- MINI CHART 6 MOIS -->
+    <div class="section">
+      <div class="section-head">
+        <h2>Inscriptions <span class="count">6 derniers mois</span></h2>
+      </div>
+      <div class="chart-card">
+        <div id="chartBars" class="chart-bars"></div>
+      </div>
+    </div>
+
     <!-- ENTREPRISES SECTION -->
     <div class="section">
       <div class="section-head">
@@ -228,6 +271,7 @@ main{padding:36px 0 80px}
           <button class="filter-chip" data-fp="active">Actives</button>
           <button class="filter-chip" data-fp="trial">Essai</button>
           <button class="filter-chip" data-fp="canceled">Annulées</button>
+          <button class="btn btn-ghost btn-sm" id="btnExportCsv" style="margin-left:8px">📥 Export CSV</button>
         </div>
       </div>
       <div class="ent-grid" id="entGrid">
