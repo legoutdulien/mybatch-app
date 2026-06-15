@@ -162,9 +162,10 @@ async function chargerTout() {
       scoped(sb.from('ingredients').select('*')).order('nom', { ascending: true }),
       scoped(sb.from('creneaux').select('*')),
       scoped(sb.from('creneaux_template').select('*')),
-      // Founder voit toutes les entreprises (super-admin), sinon seulement la sienne
+      // Founder voit toutes les entreprises (super-admin) SAUF LGDL (qui est gere via app.legoutdulien.com)
+      // Le filtre nom_marque ILIKE exclut "Le Gout du Lien" sans avoir besoin de son UUID
       isFounder()
-        ? sb.from('entreprises').select('*').order('nom_marque', { ascending: true })
+        ? sb.from('entreprises').select('*').not('nom_marque', 'ilike', '%goût du lien%').order('nom_marque', { ascending: true })
         : sb.from('entreprises').select('*').eq('id', CURRENT_ENTREPRISE_ID),
       scoped(sb.from('forfaits').select('*')).order('ordre', { ascending: true })
     ]);
