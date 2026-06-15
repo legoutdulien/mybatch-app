@@ -210,6 +210,7 @@ function renderEntreprises() {
         </div>
         <div class="ent-actions">
           <button class="btn btn-ghost btn-sm" onclick="openDetail('${e.id}')">Détail</button>
+          <button class="btn btn-orange btn-sm" onclick="openInvoice('${e.id}')">📄 Facture</button>
           ${e.stripe_customer_id ? `<button class="btn btn-ghost btn-sm" onclick="openStripe('${e.stripe_customer_id}')">Stripe ↗</button>` : ''}
         </div>
       </div>
@@ -298,6 +299,10 @@ function openStripe(customerId) {
   window.open(`https://dashboard.stripe.com/customers/${customerId}`, '_blank');
 }
 
+function openInvoice(entrepriseId) {
+  window.open(`invoice.html?entreprise_id=${encodeURIComponent(entrepriseId)}`, '_blank');
+}
+
 async function actSuspend(id) {
   if (!confirm('Suspendre cette entreprise ? Le compte sera désactivé.')) return;
   await callAction('suspend', id);
@@ -359,4 +364,5 @@ document.addEventListener('DOMContentLoaded', () => {
 // Expose for inline onclicks
 window.openDetail = openDetail;
 window.openStripe = openStripe;
+window.openInvoice = openInvoice;
 window.closeModal = closeModal;

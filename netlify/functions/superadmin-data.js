@@ -94,39 +94,87 @@ exports.handler = async (event) => {
       }
     }
 
-    // Activite recente
+    // Activite recente - UNIQUEMENT les evenements d'abonnement (pas les connexions)
     const activity = [];
-    // Derniers signups (entreprises creees dans les 7 derniers jours)
-    const recentSignups = entreprises.filter(e => {
-      if (!e.created_at) return false;
-      return (Date.now() - new Date(e.created_at).getTime()) < 7 * 24 * 60 * 60 * 1000;
-    });
-    recentSignups.slice(0, 5).forEach(e => {
+    const now = Date.now();
+    const D = ms => ms * 24 * 60 * 60 * 1000;
+
+    // Nouveaux signups (30 derniers jours)
+    entreprises.forEach(e => {
+      if (!e.created_at) return;
+      if (now - new Date(e.created_at).getTime() > D(30)) return;
       activity.push({
         when: e.created_at,
         icon: '🆕',
-        html: `Nouveau compte : <strong>${escapeHtml(e.nom_marque || e.admin_email)}</strong>`
+        type: 'signup',
+        html: `Inscription : <strong>${escapeHtml(e.nom_marque || e.admin_email)}</strong>`
       });
     });
 
-    // Last logins (auth.users last_sign_in_at via admin API)
-    try {
-      const lsRes = await fetch(`${sbUrl}/auth/v1/admin/users?per_page=20`, { headers: adminHeaders });
-      if (lsRes.ok) {
-        const users = (await lsRes.json()).users || [];
-        const recentLogins = users
-          .filter(u => u.last_sign_in_at && u.email !== SUPER_ADMIN_EMAIL)
-          .sort((a, b) => new Date(b.last_sign_in_at) - new Date(a.last_sign_in_at))
-          .slice(0, 5);
-        recentLogins.forEach(u => {
-          activity.push({
-            when: u.last_sign_in_at,
-            icon: '🔑',
-            html: `<strong>${escapeHtml(u.email)}</strong> s'est connectée`
-          });
-        });
-      }
-    } catch {}
+    // Essais qui se terminent dans les 7 prochains jours (warning)
+    entreprises.forEach(e => {
+      if (e.subscription_status !== 'trialing' || !e.trial_ends_at) return;
+      const trialEnd = new Date(e.trial_ends_at).getTime();
+      if (trialEnd <= now || trialEnd > now + D(7)) return;
+      const daysLeft = Math.max(1, Math.ceil((trialEnd - now) / D(1)));
+      activity.push({
+        when: e.trial_ends_at,
+        icon: '⏰',
+        type: 'trial_ending',
+        html: `Essai de <strong>${escapeHtml(e.nom_marque)}</strong> se termine ${daysLeft === 1 ? 'demain' : 'dans ' + daysLeft + ' jours'}`
+      });
+    });
+
+    // Essais qui se sont terminés hier ou aujourd'hui (convertis ou expirés)
+    entreprises.forEach(e => {
+      if (!e.trial_ends_at) return;
+      const trialEnd = new Date(e.trial_ends_at).getTime();
+      if (trialEnd > now || trialEnd < now - D(2)) return;
+      const converted = e.subscription_status === 'active';
+      activity.push({
+        when: e.trial_ends_at,
+        icon: converted ? '💳' : '🚪',
+        type: converted ? 'trial_converted' : 'trial_expired',
+        html: converted
+          ? `<strong>${escapeHtml(e.nom_marque)}</strong> a converti son essai en abonnement payant`
+          : `Essai de <strong>${escapeHtml(e.nom_marque)}</strong> expiré sans conversion`
+      });
+    });
+
+    // Paiements en échec (past_due)
+    entreprises.forEach(e => {
+      if (e.subscription_status !== 'past_due') return;
+      activity.push({
+        when: e.current_period_end || e.trial_ends_at || e.created_at,
+        icon: '⚠️',
+        type: 'past_due',
+        html: `<strong>${escapeHtml(e.nom_marque)}</strong> : paiement en échec, à relancer`
+      });
+    });
+
+    // Annulations recentes (canceled dans les 30 derniers jours via updated_at)
+    entreprises.forEach(e => {
+      if (e.subscription_status !== 'canceled' || !e.updated_at) return;
+      if (now - new Date(e.updated_at).getTime() > D(30)) return;
+      activity.push({
+        when: e.updated_at,
+        icon: '🚫',
+        type: 'canceled',
+        html: `<strong>${escapeHtml(e.nom_marque)}</strong> a annulé son abonnement`
+      });
+    });
+
+    // Comptes suspendus
+    entreprises.forEach(e => {
+      if (e.active !== false || !e.updated_at) return;
+      if (now - new Date(e.updated_at).getTime() > D(30)) return;
+      activity.push({
+        when: e.updated_at,
+        icon: '⛔',
+        type: 'suspended',
+        html: `<strong>${escapeHtml(e.nom_marque)}</strong> compte suspendu`
+      });
+    });
 
     activity.sort((a, b) => new Date(b.when) - new Date(a.when));
 

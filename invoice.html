@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Facture · my batch</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --ink:#1A1A1A;--tx:#4B5563;--muted:#6B7280;
+  --bg:#FAF6EE;--line:#E5E7EB;
+  --orange:#E8843D;--green:#3D6B4F;
+}
+body{font-family:'Inter',system-ui,sans-serif;background:#F3F4F6;color:var(--ink);font-size:14px;line-height:1.5;padding:20px 0}
+
+.toolbar{max-width:794px;margin:0 auto 20px;display:flex;gap:10px;align-items:center;padding:0 20px}
+.toolbar h1{font-size:18px;font-weight:700;flex:1}
+.btn{padding:10px 18px;border-radius:10px;background:var(--ink);color:#fff;border:none;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+.btn:hover{background:#000}
+.btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.btn.ghost:hover{border-color:var(--ink)}
+
+/* INVOICE PAPER */
+.paper{max-width:794px;margin:0 auto;background:#fff;padding:48px 56px 40px;box-shadow:0 4px 24px rgba(0,0,0,.08);min-height:1123px;display:flex;flex-direction:column}
+
+.head{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:32px;border-bottom:1px solid var(--line)}
+.brand{display:inline-flex;align-items:baseline}
+.brand-name{font-weight:800;font-size:32px;letter-spacing:-.04em;color:var(--ink)}
+.brand-dot{display:inline-block;width:.3em;height:.3em;border-radius:50%;background:var(--orange);margin-left:.08em;vertical-align:baseline}
+
+.head-r{text-align:right}
+.head-r .label{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);font-weight:600;margin-bottom:6px}
+.head-r .num{font-size:24px;font-weight:800;color:var(--ink);letter-spacing:-.015em;margin-bottom:14px}
+.head-r .dates{font-size:12.5px;color:var(--tx);line-height:1.7}
+.head-r .dates strong{color:var(--ink);font-weight:600}
+
+.parties{display:grid;grid-template-columns:1fr 1fr;gap:48px;padding:32px 0;border-bottom:1px solid var(--line)}
+.party h3{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);font-weight:600;margin-bottom:12px}
+.party .name{font-size:16px;font-weight:700;color:var(--ink);margin-bottom:6px;letter-spacing:-.01em}
+.party .lines{font-size:12.5px;color:var(--tx);line-height:1.65}
+.party .lines em{color:var(--muted);font-style:normal}
+
+.lines-table{margin:32px 0;width:100%;border-collapse:collapse}
+.lines-table thead th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:600;padding-bottom:12px;border-bottom:2px solid var(--ink)}
+.lines-table thead th:last-child{text-align:right}
+.lines-table tbody td{padding:18px 0;border-bottom:1px solid var(--line);font-size:14px;vertical-align:top}
+.lines-table tbody td:last-child{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+.lines-table tbody td .desc{color:var(--ink);font-weight:600;margin-bottom:3px}
+.lines-table tbody td .sub{color:var(--muted);font-size:12.5px}
+
+.totals{margin-top:24px;display:flex;justify-content:flex-end}
+.totals table{min-width:260px}
+.totals td{padding:7px 0;font-size:13.5px}
+.totals td:first-child{color:var(--tx);padding-right:36px}
+.totals td:last-child{text-align:right;font-variant-numeric:tabular-nums;font-weight:600;color:var(--ink)}
+.totals .total-row td{padding-top:12px;border-top:2px solid var(--ink);font-size:18px;font-weight:800}
+.totals .total-row td:first-child{color:var(--ink)}
+
+.footer-block{margin-top:auto;padding-top:40px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted);line-height:1.6;display:grid;grid-template-columns:1fr 1fr;gap:36px}
+.footer-block .col h4{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:600;margin-bottom:6px}
+.footer-block .col p{color:var(--tx)}
+.footer-block .col strong{color:var(--ink);font-weight:600}
+
+.mention{margin-top:24px;font-size:11px;color:var(--muted);text-align:center;font-style:italic}
+
+@media print{
+  body{background:#fff;padding:0}
+  .toolbar{display:none}
+  .paper{box-shadow:none;max-width:none;margin:0;padding:24mm 18mm}
+  @page{size:A4;margin:0}
+}
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <h1 id="ttitle">Facture</h1>
+  <button class="btn ghost" onclick="window.close()">← Fermer</button>
+  <button class="btn ghost" id="btnMail">📧 Envoyer par mail</button>
+  <button class="btn" onclick="window.print()">🖨️ Imprimer / PDF</button>
+</div>
+
+<div class="paper" id="paper">
+  <div class="head">
+    <div class="brand">
+      <span class="brand-name">my batch<span class="brand-dot"></span></span>
+    </div>
+    <div class="head-r">
+      <div class="label">Facture n°</div>
+      <div class="num" id="fNum">—</div>
+      <div class="dates">
+        <div><strong>Date d'émission :</strong> <span id="fIssue">—</span></div>
+        <div><strong>Échéance :</strong> <span id="fDue">à réception</span></div>
+        <div><strong>Période :</strong> <span id="fPeriod">—</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="parties">
+    <div class="party">
+      <h3>De</h3>
+      <div class="name">my batch</div>
+      <div class="lines">
+        <em>[Raison sociale à compléter]</em><br>
+        <em>[Adresse]</em><br>
+        <em>SIRET : [à compléter]</em><br>
+        contact@mybatch.cooking
+      </div>
+    </div>
+    <div class="party">
+      <h3>Facturé à</h3>
+      <div class="name" id="cName">—</div>
+      <div class="lines">
+        <span id="cEmail">—</span><br>
+        <span id="cExtra"></span>
+      </div>
+    </div>
+  </div>
+
+  <table class="lines-table">
+    <thead>
+      <tr>
+        <th style="width:55%">Description</th>
+        <th style="width:15%">Quantité</th>
+        <th style="width:15%">Prix unitaire</th>
+        <th style="width:15%">Total</th>
+      </tr>
+    </thead>
+    <tbody id="linesBody"></tbody>
+  </table>
+
+  <div class="totals">
+    <table>
+      <tr><td>Sous-total HT</td><td id="tHt">—</td></tr>
+      <tr><td>TVA (0% — auto-entrepreneur)</td><td>0,00 €</td></tr>
+      <tr class="total-row"><td>Total TTC</td><td id="tTtc">—</td></tr>
+    </table>
+  </div>
+
+  <div class="mention">TVA non applicable, art. 293 B du Code Général des Impôts</div>
+
+  <div class="footer-block">
+    <div class="col">
+      <h4>Paiement</h4>
+      <p>Prélèvement automatique par carte bancaire via Stripe.<br>Reçu Stripe envoyé en parallèle.</p>
+    </div>
+    <div class="col">
+      <h4>Service</h4>
+      <p><strong>my batch</strong> — l'application des batchcookeuses indépendantes.<br>https://app.mybatch.cooking</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const entId = params.get('entreprise_id');
+const monthParam = params.get('month'); // YYYY-MM
+const token = params.get('token') || localStorage.getItem('mb_session') ? JSON.parse(localStorage.getItem('mb_session') || '{}').access_token : null;
+
+const fmt = n => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
+const fmtDate = d => new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+const monthLabel = ym => {
+  const [y, m] = ym.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+};
+
+async function load() {
+  if (!entId) { alert('entreprise_id manquant'); return; }
+  if (!token) { alert('Session expirée'); window.location.href = '/superadmin.html'; return; }
+  try {
+    const r = await fetch('/.netlify/functions/superadmin-invoice-data?entreprise_id=' + encodeURIComponent(entId) + (monthParam ? '&month=' + monthParam : ''), {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const inv = await r.json();
+    render(inv);
+  } catch (e) {
+    alert('Erreur : ' + e.message);
+  }
+}
+
+function render(inv) {
+  document.getElementById('ttitle').textContent = 'Facture · ' + (inv.entreprise_name || '');
+  document.getElementById('fNum').textContent = inv.invoice_number;
+  document.getElementById('fIssue').textContent = fmtDate(inv.issue_date);
+  document.getElementById('fPeriod').textContent = inv.period_label;
+  document.getElementById('cName').textContent = inv.entreprise_name;
+  document.getElementById('cEmail').textContent = inv.entreprise_email;
+  document.getElementById('cExtra').innerHTML = inv.entreprise_slug ? '<em style="color:#9CA3AF">slug : ' + inv.entreprise_slug + '</em>' : '';
+
+  document.getElementById('linesBody').innerHTML = inv.lines.map(l => `
+    <tr>
+      <td><div class="desc">${l.desc}</div>${l.sub ? '<div class="sub">' + l.sub + '</div>' : ''}</td>
+      <td>${l.qty}</td>
+      <td>${fmt(l.unit_price)}</td>
+      <td>${fmt(l.total)}</td>
+    </tr>
+  `).join('');
+
+  document.getElementById('tHt').textContent = fmt(inv.total);
+  document.getElementById('tTtc').textContent = fmt(inv.total);
+
+  document.getElementById('btnMail').onclick = () => {
+    const subject = encodeURIComponent('Votre facture my batch · ' + inv.period_label);
+    const body = encodeURIComponent(
+      'Bonjour,\n\n' +
+      'Veuillez trouver ci-joint votre facture my batch pour la période de ' + inv.period_label + '.\n\n' +
+      'Numéro : ' + inv.invoice_number + '\n' +
+      'Montant : ' + fmt(inv.total) + '\n\n' +
+      'Vous pouvez la consulter et l\'imprimer ici : ' + window.location.href + '\n\n' +
+      'Belle journée,\nL\'équipe my batch'
+    );
+    window.location.href = 'mailto:' + encodeURIComponent(inv.entreprise_email) + '?subject=' + subject + '&body=' + body;
+  };
+}
+
+load();
+</script>
+</body>
+</html>
