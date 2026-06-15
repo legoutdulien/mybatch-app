@@ -131,8 +131,17 @@ async function login() {
     if (authErr) throw new Error('Email ou mot de passe incorrect.');
     const r = await detectRole(auth.user.id);
     if (r.role === 'admin') {
-      // Super-admin my batch -> redirige vers le portail dedie
+      // Super-admin my batch -> stocke le token au format mb_session pour superadmin.html, puis redirige
       if ((auth.user.email || '').toLowerCase() === 'structify.crm@gmail.com') {
+        const { data: { session: sess } } = await sb.auth.getSession();
+        if (sess) {
+          localStorage.setItem('mb_session', JSON.stringify({
+            access_token: sess.access_token,
+            refresh_token: sess.refresh_token,
+            expires_at: sess.expires_at,
+            user: { id: auth.user.id, email: auth.user.email }
+          }));
+        }
         window.location.href = 'superadmin.html';
         return;
       }
@@ -1136,6 +1145,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     const r = await detectRole(session.user.id);
     if (r.role === 'admin') {
       if ((session.user.email || '').toLowerCase() === 'structify.crm@gmail.com') {
+        // Stocke le token pour que superadmin.html puisse l'utiliser direct
+        localStorage.setItem('mb_session', JSON.stringify({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+          expires_at: session.expires_at,
+          user: { id: session.user.id, email: session.user.email }
+        }));
         window.location.href = 'superadmin.html';
         return;
       }
