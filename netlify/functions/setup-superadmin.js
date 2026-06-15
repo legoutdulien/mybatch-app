@@ -77,7 +77,6 @@ exports.handler = async (event) => {
           nom_marque: 'My Batch (Super-Admin)',
           nom_contact: 'Super-Admin',
           admin_email: SUPERADMIN_EMAIL,
-          admin_password: SUPERADMIN_PASSWORD,
           plan: 'founder',
           formule: 'premium',
           cycle: 'annuel',
@@ -85,8 +84,7 @@ exports.handler = async (event) => {
           couleur_secondaire: '#3D6B4F',
           couleur_topbar: '#1A1A1A',
           active: true,
-          subscription_status: 'active',
-          montant_client_default: 0
+          subscription_status: 'active'
         })
       });
       if (!entInsert.ok) {
