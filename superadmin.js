@@ -38,16 +38,45 @@ function showAuth() { $('pAuth').style.display = 'flex'; $('pApp').style.display
 
 async function bootstrapAuth() {
   const sess = localStorage.getItem('mb_session');
-  if (sess) {
-    try {
-      const data = JSON.parse(sess);
-      if (data.access_token && data.expires_at > Date.now() / 1000) {
-        CURRENT_USER = data.user;
-        return await onAuthSuccess(data);
+  if (!sess) { showAuth(); return; }
+  let data;
+  try { data = JSON.parse(sess); }
+  catch { localStorage.removeItem('mb_session'); showAuth(); return; }
+  if (!data.access_token) { localStorage.removeItem('mb_session'); showAuth(); return; }
+
+  // Test le token via /superadmin-data : si 401, refresh ou logout
+  CURRENT_USER = data.user;
+  $('hEmail').textContent = data.user?.email || '';
+  showApp();
+  try {
+    await loadAll();
+  } catch (e) {
+    if (String(e.message).includes('Token') || String(e.message).match(/401/)) {
+      // Token expire : tente un refresh
+      const refreshed = await tryRefresh(data.refresh_token);
+      if (refreshed) {
+        localStorage.setItem('mb_session', JSON.stringify(refreshed));
+        CURRENT_USER = refreshed.user;
+        try { await loadAll(); return; } catch {}
       }
-    } catch {}
+      localStorage.removeItem('mb_session');
+      showAuth();
+      showAuthErr('Session expirée, reconnectez-vous.');
+    }
   }
-  showAuth();
+}
+
+async function tryRefresh(refreshToken) {
+  if (!refreshToken) return null;
+  try {
+    const r = await fetch('/.netlify/functions/superadmin-auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken })
+    });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch { return null; }
 }
 
 async function login() {
@@ -79,14 +108,18 @@ async function login() {
 function showAuthErr(msg) { const el = $('authErr'); el.textContent = msg; el.style.display = 'block'; }
 
 async function onAuthSuccess(authData) {
-  if (authData.user?.email !== SUPER_ADMIN_EMAIL) {
+  if ((authData.user?.email || '').toLowerCase() !== SUPER_ADMIN_EMAIL.toLowerCase()) {
     localStorage.removeItem('mb_session');
     showAuthErr('Accès réservé au super-admin.');
     return;
   }
   $('hEmail').textContent = authData.user.email;
   showApp();
-  await loadAll();
+  try {
+    await loadAll();
+  } catch (e) {
+    toast('Erreur chargement initial : ' + e.message, 'error');
+  }
 }
 
 function logout() {
