@@ -1,82 +1,124 @@
 // One-shot setup function for the My Batch super-admin account.
-// Creates auth user + entreprise + admins_entreprise link in a single transaction.
-// PROTECT BY DELETING THIS FILE AFTER FIRST SUCCESSFUL CALL.
+// Creates auth user + entreprise + admins_entreprise link using fetch (no npm deps).
+// DELETE THIS FILE AFTER FIRST SUCCESSFUL CALL.
 
-const { createClient } = require('@supabase/supabase-js');
+const SETUP_SECRET = 'mb-setup-onetime-2026-06-15-x7k9q2';
+const SUPERADMIN_EMAIL = 'structify.crm@gmail.com';
+const SUPERADMIN_PASSWORD = 'MyBatch!Super2026#Admin';
 
 exports.handler = async (event) => {
-  const SECRET = process.env.SETUP_SECRET;
   const provided = event.queryStringParameters?.secret;
-  if (!SECRET || provided !== SECRET) {
-    return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized — set SETUP_SECRET env var and pass it as ?secret=' }) };
+  if (provided !== SETUP_SECRET) {
+    return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
   }
 
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_KEY;
-  if (!url || !key) {
-    return { statusCode: 500, body: JSON.stringify({ error: 'Missing SUPABASE_URL or SUPABASE_SERVICE_KEY env vars' }) };
+  const sbUrl = process.env.SUPABASE_URL;
+  const sbKey = process.env.SUPABASE_SERVICE_KEY;
+  if (!sbUrl || !sbKey) {
+    return { statusCode: 500, body: JSON.stringify({ error: 'Missing SUPABASE_URL or SUPABASE_SERVICE_KEY' }) };
   }
 
-  const sb = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
-
-  const SUPERADMIN_EMAIL = 'structify.crm@gmail.com';
-  const SUPERADMIN_PASSWORD = 'MyBatch!Super2026#Admin';
+  const authHeaders = {
+    'apikey': sbKey,
+    'Authorization': `Bearer ${sbKey}`,
+    'Content-Type': 'application/json'
+  };
 
   try {
-    // Step 0: Check if a user with this email already exists (to make this idempotent)
-    const { data: existingUsers, error: listError } = await sb.auth.admin.listUsers({ page: 1, perPage: 1000 });
-    if (listError) throw new Error(`listUsers failed: ${listError.message}`);
-    const existing = existingUsers.users.find(u => u.email === SUPERADMIN_EMAIL);
+    // ============= STEP 1 : Get or create auth user =============
     let userId;
+    // List users and check if email exists
+    const listRes = await fetch(`${sbUrl}/auth/v1/admin/users?per_page=200`, { headers: authHeaders });
+    if (!listRes.ok) {
+      const txt = await listRes.text();
+      throw new Error(`listUsers HTTP ${listRes.status}: ${txt}`);
+    }
+    const listJson = await listRes.json();
+    const existing = (listJson.users || []).find(u => u.email === SUPERADMIN_EMAIL);
+
     if (existing) {
       userId = existing.id;
     } else {
-      // Step 1: Create the auth user
-      const { data: created, error: createError } = await sb.auth.admin.createUser({
-        email: SUPERADMIN_EMAIL,
-        password: SUPERADMIN_PASSWORD,
-        email_confirm: true,
-        user_metadata: { role: 'superadmin' }
+      const createRes = await fetch(`${sbUrl}/auth/v1/admin/users`, {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({
+          email: SUPERADMIN_EMAIL,
+          password: SUPERADMIN_PASSWORD,
+          email_confirm: true,
+          user_metadata: { role: 'superadmin' }
+        })
       });
-      if (createError) throw new Error(`createUser failed: ${createError.message}`);
-      userId = created.user.id;
+      if (!createRes.ok) {
+        const txt = await createRes.text();
+        throw new Error(`createUser HTTP ${createRes.status}: ${txt}`);
+      }
+      const created = await createRes.json();
+      userId = created.id;
     }
 
-    // Step 2: Check if the entreprise already exists
-    const { data: existingEnt } = await sb.from('entreprises').select('*').eq('admin_email', SUPERADMIN_EMAIL).maybeSingle();
+    // ============= STEP 2 : Get or create entreprise =============
     let entrepriseId;
-    if (existingEnt) {
-      entrepriseId = existingEnt.id;
+    const entCheck = await fetch(`${sbUrl}/rest/v1/entreprises?admin_email=eq.${encodeURIComponent(SUPERADMIN_EMAIL)}&select=id`, { headers: authHeaders });
+    if (!entCheck.ok) {
+      const txt = await entCheck.text();
+      throw new Error(`entreprise check HTTP ${entCheck.status}: ${txt}`);
+    }
+    const entCheckData = await entCheck.json();
+
+    if (entCheckData && entCheckData.length > 0) {
+      entrepriseId = entCheckData[0].id;
     } else {
-      const { data: ent, error: entError } = await sb.from('entreprises').insert({
-        slug: 'mybatch-admin',
-        nom_marque: 'My Batch (Super-Admin)',
-        nom_contact: 'Super-Admin',
-        admin_email: SUPERADMIN_EMAIL,
-        admin_password: SUPERADMIN_PASSWORD,
-        plan: 'founder',
-        formule: 'premium',
-        cycle: 'annuel',
-        couleur_principale: '#E8843D',
-        couleur_secondaire: '#3D6B4F',
-        couleur_topbar: '#1A1A1A',
-        active: true,
-        subscription_status: 'active',
-        montant_client_default: 0
-      }).select().single();
-      if (entError) throw new Error(`insert entreprise failed: ${entError.message}`);
-      entrepriseId = ent.id;
+      const entInsert = await fetch(`${sbUrl}/rest/v1/entreprises`, {
+        method: 'POST',
+        headers: { ...authHeaders, 'Prefer': 'return=representation' },
+        body: JSON.stringify({
+          slug: 'mybatch-admin',
+          nom_marque: 'My Batch (Super-Admin)',
+          nom_contact: 'Super-Admin',
+          admin_email: SUPERADMIN_EMAIL,
+          admin_password: SUPERADMIN_PASSWORD,
+          plan: 'founder',
+          formule: 'premium',
+          cycle: 'annuel',
+          couleur_principale: '#E8843D',
+          couleur_secondaire: '#3D6B4F',
+          couleur_topbar: '#1A1A1A',
+          active: true,
+          subscription_status: 'active',
+          montant_client_default: 0
+        })
+      });
+      if (!entInsert.ok) {
+        const txt = await entInsert.text();
+        throw new Error(`insert entreprise HTTP ${entInsert.status}: ${txt}`);
+      }
+      const entCreated = await entInsert.json();
+      entrepriseId = Array.isArray(entCreated) ? entCreated[0].id : entCreated.id;
     }
 
-    // Step 3: Link them in admins_entreprise (skip if already linked)
-    const { data: existingLink } = await sb.from('admins_entreprise').select('*').eq('user_id', userId).eq('entreprise_id', entrepriseId).maybeSingle();
-    if (!existingLink) {
-      const { error: linkError } = await sb.from('admins_entreprise').insert({
-        user_id: userId,
-        entreprise_id: entrepriseId,
-        nom: 'Super-Admin'
+    // ============= STEP 3 : Link user to entreprise =============
+    const linkCheck = await fetch(`${sbUrl}/rest/v1/admins_entreprise?user_id=eq.${encodeURIComponent(userId)}&entreprise_id=eq.${encodeURIComponent(entrepriseId)}&select=id`, { headers: authHeaders });
+    if (!linkCheck.ok) {
+      const txt = await linkCheck.text();
+      throw new Error(`link check HTTP ${linkCheck.status}: ${txt}`);
+    }
+    const linkData = await linkCheck.json();
+
+    if (!linkData || linkData.length === 0) {
+      const linkInsert = await fetch(`${sbUrl}/rest/v1/admins_entreprise`, {
+        method: 'POST',
+        headers: { ...authHeaders, 'Prefer': 'return=representation' },
+        body: JSON.stringify({
+          user_id: userId,
+          entreprise_id: entrepriseId,
+          nom: 'Super-Admin'
+        })
       });
-      if (linkError) throw new Error(`link admins_entreprise failed: ${linkError.message}`);
+      if (!linkInsert.ok) {
+        const txt = await linkInsert.text();
+        throw new Error(`link insert HTTP ${linkInsert.status}: ${txt}`);
+      }
     }
 
     return {
@@ -88,14 +130,19 @@ exports.handler = async (event) => {
         entreprise_id: entrepriseId,
         email: SUPERADMIN_EMAIL,
         password: SUPERADMIN_PASSWORD,
-        message: 'Super-admin actif. Login OK sur app.mybatch.cooking. SUPPRIME CE FICHIER netlify/functions/setup-superadmin.js APRES vérification.'
+        next_steps: [
+          '1. Login sur https://app.mybatch.cooking avec ' + SUPERADMIN_EMAIL,
+          '2. Verifier que tu vois bien tous les onglets super-admin dont "Entreprises"',
+          '3. Verifier que "Le Gout du Lien" est ABSENT de la liste',
+          '4. SUPPRIMER le fichier netlify/functions/setup-superadmin.js et repousser le repo'
+        ]
       }, null, 2)
     };
   } catch (err) {
     return {
       statusCode: 500,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: err.message, stack: err.stack })
+      body: JSON.stringify({ error: err.message })
     };
   }
 };
