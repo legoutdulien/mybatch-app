@@ -188,22 +188,13 @@ main{padding:36px 0 80px}
 </head>
 <body>
 
-<!-- LOGIN OVERLAY -->
-<div id="pAuth">
-  <div class="auth-card">
-    <h1>my batch<span class="dot"></span></h1>
-    <span class="badge">Super-Admin</span>
-    <p class="sub">Connectez-vous pour accéder au portail.</p>
-    <div class="field">
-      <label for="email">Email</label>
-      <input type="email" id="email" autocomplete="email" placeholder="structify.crm@gmail.com">
-    </div>
-    <div class="field">
-      <label for="password">Mot de passe</label>
-      <input type="password" id="password" autocomplete="current-password">
-    </div>
-    <button class="auth-btn" id="btnLogin">Connexion →</button>
-    <div class="auth-err" id="authErr"></div>
+<!-- LOADING OVERLAY (avant chargement data) -->
+<div id="pAuth" style="background:var(--bg)">
+  <div style="text-align:center">
+    <div style="font-size:32px;font-weight:800;letter-spacing:-.035em;color:var(--ink);margin-bottom:8px">my batch<span style="display:inline-block;width:.3em;height:.3em;border-radius:50%;background:var(--orange);margin-left:.08em;vertical-align:baseline"></span></div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:24px">Portail super-admin</div>
+    <div class="spin" style="display:inline-block;width:32px;height:32px;border:3px solid var(--line);border-top-color:var(--orange);border-radius:50%;animation:spin .8s linear infinite"></div>
+    <div style="margin-top:16px;font-size:13px;color:var(--muted)">Redirection…</div>
   </div>
 </div>
 

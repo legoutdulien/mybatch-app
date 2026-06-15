@@ -37,14 +37,20 @@ function showApp() { $('pAuth').style.display = 'none'; $('pApp').style.display 
 function showAuth() { $('pAuth').style.display = 'flex'; $('pApp').style.display = 'none'; }
 
 async function bootstrapAuth() {
+  // Pas de login propre : si pas de session valide, on renvoie vers la page d'accueil
+  // qui gere le login unifie (batchcookeuses, clientes, super-admin)
+  const redirectToHome = () => {
+    localStorage.removeItem('mb_session');
+    window.location.href = '/';
+  };
+
   const sess = localStorage.getItem('mb_session');
-  if (!sess) { showAuth(); return; }
+  if (!sess) { redirectToHome(); return; }
   let data;
   try { data = JSON.parse(sess); }
-  catch { localStorage.removeItem('mb_session'); showAuth(); return; }
-  if (!data.access_token) { localStorage.removeItem('mb_session'); showAuth(); return; }
+  catch { redirectToHome(); return; }
+  if (!data.access_token) { redirectToHome(); return; }
 
-  // Test le token via /superadmin-data : si 401, refresh ou logout
   CURRENT_USER = data.user;
   $('hEmail').textContent = data.user?.email || '';
   showApp();
@@ -52,16 +58,13 @@ async function bootstrapAuth() {
     await loadAll();
   } catch (e) {
     if (String(e.message).includes('Token') || String(e.message).match(/401/)) {
-      // Token expire : tente un refresh
       const refreshed = await tryRefresh(data.refresh_token);
       if (refreshed) {
         localStorage.setItem('mb_session', JSON.stringify(refreshed));
         CURRENT_USER = refreshed.user;
         try { await loadAll(); return; } catch {}
       }
-      localStorage.removeItem('mb_session');
-      showAuth();
-      showAuthErr('Session expirée, reconnectez-vous.');
+      redirectToHome();
     }
   }
 }
@@ -79,53 +82,21 @@ async function tryRefresh(refreshToken) {
   } catch { return null; }
 }
 
-async function login() {
-  const email = $('email').value.trim();
-  const password = $('password').value;
-  if (!email || !password) { showAuthErr('Email et mot de passe requis'); return; }
-  $('btnLogin').disabled = true;
-  $('btnLogin').textContent = 'Connexion…';
-  $('authErr').style.display = 'none';
-  try {
-    const r = await fetch('/.netlify/functions/superadmin-auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error || 'Identifiants invalides');
-    localStorage.setItem('mb_session', JSON.stringify(data));
-    CURRENT_USER = data.user;
-    await onAuthSuccess(data);
-  } catch (e) {
-    showAuthErr(e.message);
-  } finally {
-    $('btnLogin').disabled = false;
-    $('btnLogin').textContent = 'Connexion →';
-  }
-}
+// Plus de login local : on passe par la home unifiee a /
 
-function showAuthErr(msg) { const el = $('authErr'); el.textContent = msg; el.style.display = 'block'; }
 
-async function onAuthSuccess(authData) {
-  if ((authData.user?.email || '').toLowerCase() !== SUPER_ADMIN_EMAIL.toLowerCase()) {
-    localStorage.removeItem('mb_session');
-    showAuthErr('Accès réservé au super-admin.');
-    return;
-  }
-  $('hEmail').textContent = authData.user.email;
-  showApp();
-  try {
-    await loadAll();
-  } catch (e) {
-    toast('Erreur chargement initial : ' + e.message, 'error');
-  }
-}
-
-function logout() {
+async function logout() {
   localStorage.removeItem('mb_session');
   CURRENT_USER = null;
-  showAuth();
+  // Aussi signOut cote Supabase pour purger la session unifiee
+  try {
+    // Cherche les keys Supabase auth (format sb-<ref>-auth-token) et les efface
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('sb-') && k.endsWith('-auth-token')) localStorage.removeItem(k);
+    }
+  } catch {}
+  window.location.href = '/';
 }
 
 // ============= DATA =============
@@ -516,10 +487,7 @@ function exportCsv() {
 // ============= EVENTS =============
 
 document.addEventListener('DOMContentLoaded', () => {
-  $('btnLogin').addEventListener('click', login);
   $('btnLogout').addEventListener('click', logout);
-  $('email').addEventListener('keydown', e => { if (e.key === 'Enter') $('password').focus(); });
-  $('password').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
 
   document.querySelectorAll('.filter-chip').forEach(b => {
     b.addEventListener('click', () => {
