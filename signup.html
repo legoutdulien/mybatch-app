@@ -36,7 +36,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--i
 .pricing-col h1 .accent{color:var(--orange)}
 .pricing-col .sub{font-size:16px;color:var(--tx-2);margin-bottom:32px;line-height:1.55}
 
-.plan{background:#fff;border:1.5px solid var(--line);border-radius:var(--r-lg);padding:22px 24px;margin-bottom:14px;cursor:pointer;transition:all .15s;position:relative}
+.plan{display:block;background:#fff;border:1.5px solid var(--line);border-radius:var(--r-lg);padding:22px 24px;margin-bottom:14px;cursor:pointer;transition:all .15s;position:relative}
 .plan:hover{border-color:var(--line-2)}
 .plan.on{border-color:var(--orange);background:linear-gradient(180deg,var(--orange-pale) 0%,#fff 70%);box-shadow:0 0 0 4px rgba(232,132,61,.12)}
 .plan.featured::before{content:"Recommandé";position:absolute;top:-11px;right:20px;background:var(--orange);color:#fff;padding:4px 12px;border-radius:999px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
@@ -62,7 +62,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--i
 .field .hint{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.4}
 .field .hint code{background:var(--bg);padding:1px 6px;border-radius:4px;font-size:11px;color:var(--ink)}
 
-.cb-row{display:flex;align-items:flex-start;gap:10px;padding:14px;background:var(--bg);border-radius:10px;margin-top:14px;cursor:pointer}
+.cb-row{display:flex;align-items:flex-start;gap:10px;padding:14px;background:var(--bg);border-radius:10px;margin-top:14px;cursor:pointer;width:100%}
 .cb-row input[type="checkbox"]{width:18px;height:18px;margin-top:1px;flex-shrink:0;accent-color:var(--orange);cursor:pointer}
 .cb-row .cb-text{font-size:12.5px;color:var(--tx);line-height:1.5}
 .cb-row .cb-text strong{color:var(--ink);font-weight:600}
@@ -105,7 +105,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--i
       <h1>Démarrez votre <span class="accent">essai gratuit de 7 jours.</span></h1>
       <p class="sub">Choisissez votre formule. Carte requise pour activer l'essai, débit uniquement à J+7 si vous continuez. Annulable en 1 clic à tout moment.</p>
 
-      <label class="plan" data-plan="mensuel">
+      <div class="plan" data-plan="mensuel" onclick="selectPlan('mensuel')">
         <input type="radio" name="plan" value="mensuel">
         <div class="plan-head">
           <span class="plan-name">Mensuel</span>
@@ -118,9 +118,9 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--i
           <li>Espace cliente intégré</li>
           <li>Support en français</li>
         </ul>
-      </label>
+      </div>
 
-      <label class="plan featured on" data-plan="annuel">
+      <div class="plan featured on" data-plan="annuel" onclick="selectPlan('annuel')">
         <input type="radio" name="plan" value="annuel" checked>
         <div class="plan-head">
           <span class="plan-name">Annuel</span>
@@ -133,7 +133,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--i
           <li><strong>+ 360 € d'économie</strong> sur l'année</li>
           <li>Mises à jour à vie incluses</li>
         </ul>
-      </label>
+      </div>
 
       <div class="assurances">
         <strong>Vos garanties</strong>
@@ -197,15 +197,16 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--i
 <script>
 const $ = id => document.getElementById(id);
 
-// Plan selection
-document.querySelectorAll('.plan').forEach(plan => {
-  plan.addEventListener('click', () => {
-    document.querySelectorAll('.plan').forEach(p => p.classList.remove('on'));
-    plan.classList.add('on');
-    plan.querySelector('input[type="radio"]').checked = true;
-    updateRenonceVisibility();
+function selectPlan(name) {
+  document.querySelectorAll('.plan').forEach(p => {
+    const isOn = p.dataset.plan === name;
+    p.classList.toggle('on', isOn);
+    const radio = p.querySelector('input[type="radio"]');
+    if (radio) radio.checked = isOn;
   });
-});
+  updateRenonceVisibility();
+}
+window.selectPlan = selectPlan;
 
 function selectedPlan() {
   const r = document.querySelector('input[name="plan"]:checked');
