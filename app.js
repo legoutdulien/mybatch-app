@@ -130,6 +130,15 @@ async function login() {
     const { data: auth, error: authErr } = await sb.auth.signInWithPassword({ email, password: mdp });
     if (authErr) throw new Error('Email ou mot de passe incorrect.');
     const r = await detectRole(auth.user.id);
+    // Bloque les utilisateurs de Le Gout du Lien sur app.mybatch.cooking : ils doivent passer par app.legoutdulien.com
+    const LGDL_ENTREPRISE_ID = '372c68d3-54a0-4d13-8ce5-8c516ac20d8f';
+    if (r.data?.entreprise_id === LGDL_ENTREPRISE_ID) {
+      await sb.auth.signOut();
+      err.innerHTML = 'Ce compte appartient à <strong>Le Goût du Lien</strong>. Connectez-vous sur <a href="https://app.legoutdulien.com" style="color:var(--vert);text-decoration:underline;font-weight:600">app.legoutdulien.com</a>';
+      err.style.display = 'block';
+      hideLoad();
+      return;
+    }
     if (r.role === 'admin') {
       // Super-admin my batch -> stocke le token au format mb_session pour superadmin.html, puis redirige
       if ((auth.user.email || '').toLowerCase() === 'structify.crm@gmail.com') {
@@ -1143,6 +1152,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   const { data: { session } } = await sb.auth.getSession();
   if (session) {
     const r = await detectRole(session.user.id);
+    // Redirige les comptes LGDL vers app.legoutdulien.com
+    const LGDL_ENTREPRISE_ID = '372c68d3-54a0-4d13-8ce5-8c516ac20d8f';
+    if (r.data?.entreprise_id === LGDL_ENTREPRISE_ID) {
+      await sb.auth.signOut();
+      window.location.href = 'https://app.legoutdulien.com';
+      return;
+    }
     if (r.role === 'admin') {
       if ((session.user.email || '').toLowerCase() === 'structify.crm@gmail.com') {
         // Stocke le token pour que superadmin.html puisse l'utiliser direct
