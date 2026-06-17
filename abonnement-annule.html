@@ -3,23 +3,85 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Paiement annulé · Mon espace Batchcooking</title>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<meta name="robots" content="noindex">
+<title>Inscription interrompue · my batch</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23FAF6EE'/%3E%3Ctext x='3' y='25' font-family='Inter,sans-serif' font-weight='800' font-size='24' fill='%231A1A1A' letter-spacing='-1.5'%3Emb%3C/text%3E%3Ccircle cx='26' cy='22' r='3.2' fill='%23E8843D'/%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'DM Sans',sans-serif;background:#f6f5f0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;color:#18180f}
-.card{background:#fff;border-radius:24px;padding:48px 40px;max-width:480px;width:100%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.08);border:1px solid #e2e1d8}
-.icon{font-size:64px;margin-bottom:18px}
-h1{font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:600;margin-bottom:12px;color:#8a6a1a}
-p{font-size:15px;line-height:1.6;color:#4a4a3a;margin-bottom:14px}
+:root{
+  --ink:#1A1A1A;--tx:#374151;--tx-2:#6B7280;--muted:#9CA3AF;
+  --bg:#FAF6EE;--bg-2:#F5F0E5;--line:#E5E0D5;--line-2:#D1CCC0;
+  --orange:#E8843D;--orange-2:#D26A1F;--orange-pale:#FCE8D8;
+}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;font-size:14px;line-height:1.5;position:relative;overflow:hidden}
+body::before{content:"";position:fixed;top:-200px;right:-150px;width:500px;height:500px;background:radial-gradient(circle, var(--orange-pale) 0%, transparent 70%);border-radius:50%;z-index:0}
+body::after{content:"";position:fixed;bottom:-180px;left:-120px;width:420px;height:420px;background:radial-gradient(circle, rgba(61,107,79,0.1) 0%, transparent 70%);border-radius:50%;z-index:0}
+
+.wrap{max-width:560px;margin:0 auto;padding:40px 24px;min-height:100vh;display:flex;flex-direction:column;position:relative;z-index:1}
+
+.head{display:flex;justify-content:space-between;align-items:center;margin-bottom:80px}
+.brand{display:inline-flex;align-items:baseline;text-decoration:none}
+.brand-name{font-size:22px;font-weight:800;color:var(--ink);letter-spacing:-.035em}
+.brand-name .dot{display:inline-block;width:.3em;height:.3em;border-radius:50%;background:var(--orange);margin-left:.08em;vertical-align:baseline}
+.help{font-size:13px;color:var(--tx-2)}
+.help a{color:var(--ink);font-weight:600;text-decoration:underline}
+
+.content{flex:1;display:flex;flex-direction:column;justify-content:center;text-align:center}
+
+.eyebrow{display:inline-block;padding:6px 14px;background:#fff;border:1px solid var(--line);border-radius:999px;font-size:11.5px;color:var(--tx-2);font-weight:600;letter-spacing:.08em;text-transform:uppercase;margin-bottom:24px}
+
+h1{font-size:42px;font-weight:800;letter-spacing:-.03em;line-height:1.1;margin-bottom:18px}
+h1 .accent{color:var(--orange)}
+.lead{font-size:16.5px;color:var(--tx-2);max-width:440px;margin:0 auto 32px;line-height:1.6}
+.lead strong{color:var(--ink);font-weight:600}
+
+.actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:36px}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:14px 26px;border-radius:12px;font-size:14.5px;font-weight:600;text-decoration:none;font-family:inherit;transition:all .15s;border:1.5px solid transparent}
+.btn-primary{background:var(--orange);color:#fff;border-color:var(--orange)}
+.btn-primary:hover{background:var(--orange-2);border-color:var(--orange-2)}
+.btn-ghost{background:transparent;color:var(--tx);border-color:var(--line-2)}
+.btn-ghost:hover{border-color:var(--ink);color:var(--ink)}
+
+.reassurance{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px 22px;display:flex;gap:14px;align-items:center;text-align:left;max-width:480px;margin:0 auto}
+.reassurance .ico{flex-shrink:0;font-size:24px}
+.reassurance .txt{font-size:13.5px;color:var(--tx-2);line-height:1.55}
+.reassurance .txt strong{color:var(--ink);font-weight:600}
+
+@media(max-width:560px){
+  h1{font-size:32px}
+  .lead{font-size:15px}
+  .head{margin-bottom:40px}
+}
 </style>
 </head>
 <body>
-<div class="card">
-  <div class="icon">⏸️</div>
-  <h1>Paiement non finalisé</h1>
-  <p>Tu as quitté le paiement avant de l'avoir terminé. Ton compte n'est pas activé.</p>
-  <p style="font-size:13px;color:#8a8a72">Pour réessayer, demande à ta cuisinière de te renvoyer le lien de paiement, ou contacte-la.</p>
+
+<div class="wrap">
+  <header class="head">
+    <a href="/" class="brand"><span class="brand-name">my batch<span class="dot"></span></span></a>
+    <div class="help">Besoin d'aide ? <a href="https://mybatch.cooking/contact.html" target="_blank">Nous écrire</a></div>
+  </header>
+
+  <div class="content">
+    <span class="eyebrow">Aucun débit effectué</span>
+    <h1>Inscription <span class="accent">interrompue.</span></h1>
+    <p class="lead">Vous avez quitté la page de paiement avant la fin. <strong>Aucune carte n'a été débitée</strong> et aucun compte n'a été créé. Vous pouvez reprendre quand vous voulez.</p>
+
+    <div class="actions">
+      <a href="/signup.html" class="btn btn-primary">Réessayer mon inscription →</a>
+      <a href="https://mybatch.cooking" class="btn btn-ghost">Retour au site</a>
+    </div>
+
+    <div class="reassurance">
+      <div class="ico">💬</div>
+      <div class="txt">
+        <strong>Une question ?</strong><br>
+        On répond sous 48h à <a href="mailto:contact@mybatch.cooking" style="color:var(--orange-2);font-weight:600">contact@mybatch.cooking</a>
+      </div>
+    </div>
+  </div>
 </div>
+
 </body>
 </html>

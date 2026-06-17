@@ -3,28 +3,132 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Abonnement confirmé · Mon espace Batchcooking</title>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<meta name="robots" content="noindex">
+<title>Bienvenue · my batch</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23FAF6EE'/%3E%3Ctext x='3' y='25' font-family='Inter,sans-serif' font-weight='800' font-size='24' fill='%231A1A1A' letter-spacing='-1.5'%3Emb%3C/text%3E%3Ccircle cx='26' cy='22' r='3.2' fill='%23E8843D'/%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'DM Sans',sans-serif;background:#f6f5f0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;color:#18180f}
-.card{background:#fff;border-radius:24px;padding:48px 40px;max-width:480px;width:100%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.08);border:1px solid #e2e1d8}
-.icon{font-size:64px;margin-bottom:18px}
-h1{font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:600;margin-bottom:12px;color:#2d5a3d}
-p{font-size:15px;line-height:1.6;color:#4a4a3a;margin-bottom:14px}
-.note{background:#e8f5e9;color:#2e7d32;border-radius:12px;padding:14px 18px;font-size:14px;margin-bottom:24px;border-left:4px solid #2e7d32;text-align:left}
-.btn{display:inline-block;padding:14px 28px;background:linear-gradient(135deg,#2d5a3d,#4a7c59);color:#fff;border-radius:12px;text-decoration:none;font-weight:500;font-size:15px;transition:.2s}
-.btn:hover{transform:translateY(-1px);box-shadow:0 6px 24px rgba(45,90,61,.3)}
+:root{
+  --ink:#1A1A1A;--tx:#374151;--tx-2:#6B7280;--muted:#9CA3AF;
+  --bg:#FAF6EE;--bg-2:#F5F0E5;--line:#E5E0D5;--line-2:#D1CCC0;
+  --green:#3D6B4F;--green-pale:#E8F0E9;
+  --orange:#E8843D;--orange-2:#D26A1F;--orange-pale:#FCE8D8;--orange-soft:#F5C28E;
+}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;font-size:14px;line-height:1.5;position:relative;overflow-x:hidden}
+
+body::before{content:"";position:fixed;top:-180px;left:-120px;width:480px;height:480px;background:radial-gradient(circle, var(--orange-pale) 0%, transparent 70%);border-radius:50%;z-index:0;pointer-events:none}
+body::after{content:"";position:fixed;bottom:-200px;right:-150px;width:520px;height:520px;background:radial-gradient(circle, rgba(61,107,79,0.12) 0%, transparent 70%);border-radius:50%;z-index:0;pointer-events:none}
+
+.wrap{max-width:780px;margin:0 auto;padding:40px 24px 60px;position:relative;z-index:1}
+
+.head{display:flex;justify-content:space-between;align-items:center;margin-bottom:50px}
+.brand{display:inline-flex;align-items:baseline;text-decoration:none}
+.brand-name{font-size:22px;font-weight:800;color:var(--ink);letter-spacing:-.035em}
+.brand-name .dot{display:inline-block;width:.3em;height:.3em;border-radius:50%;background:var(--orange);margin-left:.08em;vertical-align:baseline}
+.help{font-size:13px;color:var(--tx-2)}
+.help a{color:var(--ink);font-weight:600;text-decoration:underline}
+
+.hero{text-align:center;margin-bottom:50px}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;background:#fff;border:1px solid var(--orange-soft);border-radius:999px;font-size:12px;color:var(--orange-2);font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:28px;box-shadow:0 2px 8px rgba(232,132,61,.1)}
+.pill .pulse{width:7px;height:7px;border-radius:50%;background:var(--orange);box-shadow:0 0 0 0 rgba(232,132,61,.5);animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(232,132,61,.5)}70%{box-shadow:0 0 0 10px rgba(232,132,61,0)}100%{box-shadow:0 0 0 0 rgba(232,132,61,0)}}
+
+h1{font-size:52px;font-weight:800;letter-spacing:-.035em;line-height:1.05;margin-bottom:18px}
+h1 .accent{color:var(--orange)}
+.lead{font-size:18px;color:var(--tx-2);max-width:520px;margin:0 auto 36px;line-height:1.55}
+
+.btn-main{display:inline-flex;align-items:center;gap:10px;padding:18px 32px;background:var(--ink);color:#fff;border:none;border-radius:14px;font-size:16px;font-weight:600;cursor:pointer;text-decoration:none;font-family:inherit;transition:all .18s;box-shadow:0 4px 16px rgba(26,26,26,.18)}
+.btn-main:hover{background:#000;transform:translateY(-2px);box-shadow:0 6px 22px rgba(26,26,26,.25)}
+.btn-main .arrow{font-size:18px;line-height:1;transition:transform .18s}
+.btn-main:hover .arrow{transform:translateX(4px)}
+
+.login-hint{font-size:13.5px;color:var(--tx-2);margin-top:18px;line-height:1.55}
+.login-hint strong{color:var(--ink);font-weight:600}
+
+.steps{background:#fff;border:1px solid var(--line);border-radius:24px;padding:36px 32px;margin-bottom:32px;box-shadow:0 4px 24px rgba(0,0,0,.04)}
+.steps h2{font-size:15px;font-weight:700;color:var(--ink);letter-spacing:-.005em;margin-bottom:24px;display:flex;align-items:center;gap:10px}
+.steps h2::before{content:"";width:32px;height:2px;background:var(--orange);border-radius:2px}
+.steps-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+.step{padding:18px 20px;background:var(--bg);border-radius:14px;border:1px solid var(--line);transition:all .15s;position:relative}
+.step:hover{border-color:var(--line-2);transform:translateY(-2px)}
+.step .num{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;background:var(--orange);color:#fff;border-radius:50%;font-size:13px;font-weight:700;margin-bottom:10px;letter-spacing:-.02em}
+.step h3{font-size:15px;font-weight:700;color:var(--ink);margin-bottom:6px;line-height:1.3;letter-spacing:-.01em}
+.step p{font-size:13px;color:var(--tx-2);line-height:1.5}
+
+.trial-info{background:var(--ink);color:#fff;border-radius:20px;padding:28px 30px;display:flex;gap:20px;align-items:flex-start}
+.trial-info .icon{flex-shrink:0;width:48px;height:48px;background:rgba(232,132,61,.18);border-radius:14px;display:flex;align-items:center;justify-content:center;color:var(--orange);font-size:24px}
+.trial-info .content{flex:1}
+.trial-info .content strong{display:block;font-size:15px;font-weight:700;margin-bottom:5px;color:#fff}
+.trial-info .content p{font-size:13.5px;color:rgba(255,255,255,.75);line-height:1.55}
+.trial-info .content p strong{display:inline;color:#fff;font-weight:600}
+
+@media(max-width:680px){
+  .wrap{padding:30px 18px 50px}
+  h1{font-size:36px}
+  .lead{font-size:16px}
+  .btn-main{padding:16px 26px;font-size:15px}
+  .steps{padding:28px 22px}
+  .steps-grid{grid-template-columns:1fr}
+  .trial-info{flex-direction:column;padding:22px}
+}
 </style>
 </head>
 <body>
-<div class="card">
-  <div class="icon">✅</div>
-  <h1>Abonnement confirmé !</h1>
-  <p>Bienvenue dans la plateforme MyBatch. Ton essai de <strong>7 jours gratuit</strong> commence maintenant.</p>
-  <div class="note">💳 Aucun débit pendant les 7 prochains jours. Tu peux annuler à tout moment depuis ton espace Paramètres → Gérer mon abonnement.</div>
-  <p style="font-size:13px;color:#8a8a72;margin-bottom:24px">Connecte-toi sur ton URL personnelle avec l'email et le mot de passe que ta cuisinière t'a fournis.</p>
-  <a href="/" class="btn">Se connecter →</a>
+
+<div class="wrap">
+
+  <header class="head">
+    <a href="/" class="brand"><span class="brand-name">my batch<span class="dot"></span></span></a>
+    <div class="help">Une question ? <a href="https://mybatch.cooking/contact.html" target="_blank">Nous écrire</a></div>
+  </header>
+
+  <section class="hero">
+    <div class="pill">
+      <span class="pulse"></span>
+      <span>Votre essai vient de démarrer</span>
+    </div>
+    <h1>Bienvenue chez <span class="accent">my batch.</span></h1>
+    <p class="lead">Votre espace est prêt. 7 jours d'essai gratuit pour explorer toutes les fonctionnalités, sans débit avant le 8ème jour.</p>
+    <a href="/" class="btn-main">Accéder à mon espace <span class="arrow">→</span></a>
+    <p class="login-hint">Identifiez-vous avec <strong>l'email</strong> et <strong>le mot de passe</strong> que vous venez de saisir.</p>
+  </section>
+
+  <section class="steps">
+    <h2>Vos premiers pas dans my batch</h2>
+    <div class="steps-grid">
+      <div class="step">
+        <span class="num">1</span>
+        <h3>Configurer votre espace</h3>
+        <p>Ajoutez votre logo, vos couleurs et vos coordonnées professionnelles.</p>
+      </div>
+      <div class="step">
+        <span class="num">2</span>
+        <h3>Saisir vos clientes</h3>
+        <p>Créez vos premières fiches clientes ou importez votre liste existante.</p>
+      </div>
+      <div class="step">
+        <span class="num">3</span>
+        <h3>Personnaliser vos recettes</h3>
+        <p>30 recettes batch cooking pré-installées. Ajoutez les vôtres en quelques clics.</p>
+      </div>
+      <div class="step">
+        <span class="num">4</span>
+        <h3>Lancer votre 1ère semaine</h3>
+        <p>Définissez vos créneaux et envoyez le lien d'espace à vos clientes.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="trial-info">
+    <div class="icon">⏱</div>
+    <div class="content">
+      <strong>Votre essai gratuit de 7 jours</strong>
+      <p>Aucun débit pendant les 7 prochains jours. À l'issue de cette période, votre carte sera <strong>automatiquement débitée</strong> du montant de votre formule (79 €/mois ou 588 €/an). Vous pouvez annuler à tout moment en <strong>1 clic</strong> depuis votre espace.</p>
+    </div>
+  </section>
+
 </div>
+
 </body>
 </html>
