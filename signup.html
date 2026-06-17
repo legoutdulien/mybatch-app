@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inscription · my batch</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23FAF6EE'/%3E%3Ctext x='3' y='25' font-family='Inter,sans-serif' font-weight='800' font-size='24' fill='%231A1A1A' letter-spacing='-1.5'%3Emb%3C/text%3E%3Ccircle cx='26' cy='22' r='3.2' fill='%23E8843D'/%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --ink:#1A1A1A;--tx:#374151;--tx-2:#6B7280;--muted:#9CA3AF;
+  --bg:#FAF6EE;--bg-2:#F5F0E5;--line:#E5E0D5;--line-2:#D1CCC0;
+  --green:#3D6B4F;--green-pale:#E8F0E9;
+  --orange:#E8843D;--orange-2:#D26A1F;--orange-pale:#FCE8D8;--orange-soft:#F5C28E;
+  --red:#DC2626;--red-pale:#FEE2E2;
+  --r:12px;--r-lg:16px;--r-xl:24px;
+}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;font-size:14px;line-height:1.5;padding:30px 20px}
+
+.wrap{max-width:1080px;margin:0 auto}
+
+/* HEADER */
+.head{display:flex;justify-content:space-between;align-items:center;margin-bottom:40px;padding:0 8px}
+.brand{display:inline-flex;align-items:baseline;text-decoration:none}
+.brand-name{font-size:22px;font-weight:800;color:var(--ink);letter-spacing:-.035em}
+.brand-name .dot{display:inline-block;width:.3em;height:.3em;border-radius:50%;background:var(--orange);margin-left:.08em;vertical-align:baseline}
+.head .login-link{font-size:14px;color:var(--tx-2);text-decoration:none}
+.head .login-link a{color:var(--ink);font-weight:600;text-decoration:underline}
+
+/* GRID */
+.signup-grid{display:grid;grid-template-columns:1fr 1.2fr;gap:40px;align-items:start}
+
+/* COL LEFT : PRICING */
+.pricing-col h1{font-size:36px;font-weight:800;letter-spacing:-.03em;line-height:1.05;margin-bottom:14px}
+.pricing-col h1 .accent{color:var(--orange)}
+.pricing-col .sub{font-size:16px;color:var(--tx-2);margin-bottom:32px;line-height:1.55}
+
+.plan{background:#fff;border:1.5px solid var(--line);border-radius:var(--r-lg);padding:22px 24px;margin-bottom:14px;cursor:pointer;transition:all .15s;position:relative}
+.plan:hover{border-color:var(--line-2)}
+.plan.on{border-color:var(--orange);background:linear-gradient(180deg,var(--orange-pale) 0%,#fff 70%);box-shadow:0 0 0 4px rgba(232,132,61,.12)}
+.plan.featured::before{content:"Recommandé";position:absolute;top:-11px;right:20px;background:var(--orange);color:#fff;padding:4px 12px;border-radius:999px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+.plan-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;gap:10px}
+.plan-name{font-size:17px;font-weight:700;color:var(--ink)}
+.plan-price{font-size:24px;font-weight:800;color:var(--ink);letter-spacing:-.02em}
+.plan-price small{font-size:13px;color:var(--tx-2);font-weight:500;margin-left:2px}
+.plan-sub{font-size:13px;color:var(--tx-2);margin-bottom:12px}
+.plan ul{list-style:none;font-size:13px;color:var(--tx);padding-left:0}
+.plan ul li{padding-left:22px;position:relative;margin-bottom:5px;line-height:1.5}
+.plan ul li::before{content:"✓";position:absolute;left:0;top:0;color:var(--green);font-weight:700}
+.plan ul li strong{color:var(--ink)}
+.plan input[type="radio"]{position:absolute;opacity:0;pointer-events:none}
+
+/* COL RIGHT : FORM */
+.form-col{background:#fff;border:1px solid var(--line);border-radius:var(--r-lg);padding:32px;box-shadow:0 4px 24px rgba(0,0,0,.04)}
+.form-col h2{font-size:22px;font-weight:700;letter-spacing:-.015em;margin-bottom:6px}
+.form-col .sub{font-size:13px;color:var(--tx-2);margin-bottom:24px}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:7px}
+.field input{width:100%;padding:12px 14px;border:1.5px solid var(--line-2);border-radius:10px;font-size:14.5px;color:var(--ink);background:#fff;outline:none;font-family:inherit;transition:border-color .15s}
+.field input:focus{border-color:var(--orange)}
+.field .hint{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.4}
+.field .hint code{background:var(--bg);padding:1px 6px;border-radius:4px;font-size:11px;color:var(--ink)}
+
+.cb-row{display:flex;align-items:flex-start;gap:10px;padding:14px;background:var(--bg);border-radius:10px;margin-top:14px;cursor:pointer}
+.cb-row input[type="checkbox"]{width:18px;height:18px;margin-top:1px;flex-shrink:0;accent-color:var(--orange);cursor:pointer}
+.cb-row .cb-text{font-size:12.5px;color:var(--tx);line-height:1.5}
+.cb-row .cb-text strong{color:var(--ink);font-weight:600}
+.cb-row .cb-text a{color:var(--green);text-decoration:underline}
+
+.submit-area{margin-top:22px}
+.btn-submit{width:100%;padding:15px;background:var(--ink);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s}
+.btn-submit:hover:not(:disabled){background:#000}
+.btn-submit:disabled{opacity:.5;cursor:not-allowed}
+.submit-area .below{font-size:12px;color:var(--muted);text-align:center;margin-top:12px;line-height:1.5}
+
+.err{background:var(--red-pale);color:var(--red);padding:11px 14px;border-radius:10px;font-size:13px;margin-top:14px;display:none}
+
+.assurances{margin-top:32px;padding:18px 22px;background:var(--bg-2);border-radius:var(--r-lg);font-size:12.5px;color:var(--tx);line-height:1.6}
+.assurances strong{color:var(--ink)}
+.assurances ul{list-style:none;margin-top:10px}
+.assurances ul li{padding-left:22px;position:relative;margin-bottom:6px}
+.assurances ul li::before{content:"🔒";position:absolute;left:0;top:0;font-size:13px}
+.assurances ul li:nth-child(2)::before{content:"✓"}
+.assurances ul li:nth-child(3)::before{content:"📧"}
+
+@media(max-width:880px){
+  .signup-grid{grid-template-columns:1fr}
+  .pricing-col h1{font-size:28px}
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="head">
+    <a href="index.html" class="brand"><span class="brand-name">my batch<span class="dot"></span></span></a>
+    <div class="login-link">Déjà inscrite ? <a href="index.html">Se connecter</a></div>
+  </div>
+
+  <div class="signup-grid">
+
+    <!-- LEFT : CHOIX DU PLAN -->
+    <div class="pricing-col">
+      <h1>Démarrez votre <span class="accent">essai gratuit de 7 jours.</span></h1>
+      <p class="sub">Choisissez votre formule. Carte requise pour activer l'essai, débit uniquement à J+7 si vous continuez. Annulable en 1 clic à tout moment.</p>
+
+      <label class="plan" data-plan="mensuel">
+        <input type="radio" name="plan" value="mensuel">
+        <div class="plan-head">
+          <span class="plan-name">Mensuel</span>
+          <span class="plan-price">79 €<small>/mois</small></span>
+        </div>
+        <div class="plan-sub">Sans engagement, résiliable à tout moment</div>
+        <ul>
+          <li>Toute l'application my batch</li>
+          <li>30 recettes batch cooking pré-installées</li>
+          <li>Espace cliente intégré</li>
+          <li>Support en français</li>
+        </ul>
+      </label>
+
+      <label class="plan featured on" data-plan="annuel">
+        <input type="radio" name="plan" value="annuel" checked>
+        <div class="plan-head">
+          <span class="plan-name">Annuel</span>
+          <span class="plan-price">49 €<small>/mois</small></span>
+        </div>
+        <div class="plan-sub">Soit 588 €/an au lieu de 948 €/an · engagement 12 mois</div>
+        <ul>
+          <li><strong>Tout le plan mensuel</strong></li>
+          <li><strong>+ Guide complet offert</strong> (valeur 149 €)</li>
+          <li><strong>+ 360 € d'économie</strong> sur l'année</li>
+          <li>Mises à jour à vie incluses</li>
+        </ul>
+      </label>
+
+      <div class="assurances">
+        <strong>Vos garanties</strong>
+        <ul>
+          <li>Paiement 100% sécurisé via Stripe (PCI DSS Level 1)</li>
+          <li>Aucun débit pendant les 7 jours d'essai</li>
+          <li>Email de confirmation immédiat</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- RIGHT : FORM -->
+    <div class="form-col">
+      <h2>Vos infos</h2>
+      <p class="sub">Création de votre espace personnel my batch. Vous pourrez tout modifier après.</p>
+
+      <div class="field">
+        <label for="nom_marque">Nom de votre activité *</label>
+        <input type="text" id="nom_marque" placeholder="Ex : Le Goût du Lien" autocomplete="organization">
+        <div class="hint">C'est le nom que verront vos clientes. Modifiable ensuite.</div>
+      </div>
+
+      <div class="field">
+        <label for="slug">Identifiant unique de votre espace *</label>
+        <input type="text" id="slug" placeholder="le-gout-du-lien">
+        <div class="hint">Lettres minuscules, chiffres et tirets uniquement. Votre URL : <code id="slugPreview">votre-slug</code>.mybatch.cooking</div>
+      </div>
+
+      <div class="field">
+        <label for="email">Votre email *</label>
+        <input type="email" id="email" autocomplete="email" placeholder="vous@email.com">
+        <div class="hint">Pour vous connecter à votre espace + recevoir les factures.</div>
+      </div>
+
+      <div class="field">
+        <label for="password">Mot de passe *</label>
+        <input type="password" id="password" autocomplete="new-password" placeholder="Au moins 8 caractères">
+      </div>
+
+      <label class="cb-row">
+        <input type="checkbox" id="cgu" required>
+        <span class="cb-text">J'accepte les <a href="https://mybatch.cooking/cgu.html" target="_blank">CGU / CGV</a> et la <a href="https://mybatch.cooking/confidentialite.html" target="_blank">politique de confidentialité</a> de my batch.</span>
+      </label>
+
+      <label class="cb-row" id="cbRenonceWrap">
+        <input type="checkbox" id="renonce">
+        <span class="cb-text">Je souhaite accéder <strong>immédiatement au guide complet</strong>, et je renonce expressément à mon droit éventuel de rétractation sur ce contenu (article L221-28-13° du Code de la consommation). <em>Sans cochage, le guide sera débloqué à J+15.</em></span>
+      </label>
+
+      <div class="err" id="errBox"></div>
+
+      <div class="submit-area">
+        <button class="btn-submit" id="btnSignup">Continuer vers le paiement →</button>
+        <div class="below">Vous serez redirigée vers Stripe pour saisir votre carte. Aucun débit pendant 7 jours.</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// Plan selection
+document.querySelectorAll('.plan').forEach(plan => {
+  plan.addEventListener('click', () => {
+    document.querySelectorAll('.plan').forEach(p => p.classList.remove('on'));
+    plan.classList.add('on');
+    plan.querySelector('input[type="radio"]').checked = true;
+    updateRenonceVisibility();
+  });
+});
+
+function selectedPlan() {
+  const r = document.querySelector('input[name="plan"]:checked');
+  return r ? r.value : 'annuel';
+}
+
+function updateRenonceVisibility() {
+  // Renonciation visible seulement pour annuel (guide inclus)
+  $('cbRenonceWrap').style.display = selectedPlan() === 'annuel' ? 'flex' : 'none';
+}
+updateRenonceVisibility();
+
+// Slug auto from nom_marque
+function slugify(s) {
+  return (s || '').toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .substring(0, 50);
+}
+let slugTouched = false;
+$('nom_marque').addEventListener('input', e => {
+  if (!slugTouched) {
+    $('slug').value = slugify(e.target.value);
+    $('slugPreview').textContent = $('slug').value || 'votre-slug';
+  }
+});
+$('slug').addEventListener('input', e => {
+  slugTouched = true;
+  e.target.value = slugify(e.target.value);
+  $('slugPreview').textContent = e.target.value || 'votre-slug';
+});
+
+function showErr(msg) {
+  const el = $('errBox');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+function hideErr() { $('errBox').style.display = 'none'; }
+
+$('btnSignup').addEventListener('click', async () => {
+  hideErr();
+  const data = {
+    plan: selectedPlan(),
+    nom_marque: $('nom_marque').value.trim(),
+    slug: $('slug').value.trim(),
+    email: $('email').value.trim(),
+    password: $('password').value,
+    cgu: $('cgu').checked,
+    renonce_retractation: $('renonce').checked && selectedPlan() === 'annuel'
+  };
+
+  // Validation
+  if (!data.nom_marque) return showErr('Le nom de votre activité est requis.');
+  if (!data.slug || data.slug.length < 3) return showErr('L\'identifiant doit faire au moins 3 caractères.');
+  if (!data.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) return showErr('Email invalide.');
+  if (!data.password || data.password.length < 8) return showErr('Mot de passe : 8 caractères minimum.');
+  if (!data.cgu) return showErr('Vous devez accepter les CGU/CGV.');
+
+  $('btnSignup').disabled = true;
+  $('btnSignup').textContent = 'Préparation du paiement…';
+
+  try {
+    const r = await fetch('/.netlify/functions/signup-checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    const out = await r.json();
+    if (!r.ok) throw new Error(out.error || 'Erreur serveur');
+    window.location.href = out.url;
+  } catch (e) {
+    showErr(e.message);
+    $('btnSignup').disabled = false;
+    $('btnSignup').textContent = 'Continuer vers le paiement →';
+  }
+});
+</script>
+</body>
+</html>

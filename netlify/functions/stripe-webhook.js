@@ -57,6 +57,130 @@ async function findEntrepriseBySubscription(sbUrl, sbKey, subId) {
   return Array.isArray(d) && d[0] ? d[0].id : null;
 }
 
+// =============== SIGNUP : cree user + entreprise + lien ===============
+async function createSignupAccount(sbUrl, sbKey, stripeKey, session) {
+  const m = session.metadata || {};
+  const email = m.signup_email;
+  const password = m.signup_password;
+  const nom_marque = m.signup_nom_marque;
+  const slug = m.signup_slug;
+  const plan = m.signup_plan; // mensuel | annuel
+  const renonce = m.signup_renonce_retractation === 'true';
+
+  if (!email || !password || !slug || !nom_marque) {
+    throw new Error('Signup metadata incomplete : ' + JSON.stringify({email,slug,nom_marque,hasPwd:!!password}));
+  }
+
+  const adminH = { apikey: sbKey, Authorization: `Bearer ${sbKey}`, 'Content-Type': 'application/json' };
+
+  // Idempotence : si une entreprise existe deja avec ce slug, on bail
+  const slugCheck = await fetch(`${sbUrl}/rest/v1/entreprises?slug=eq.${encodeURIComponent(slug)}&select=id`, { headers: adminH });
+  const slugData = await slugCheck.json();
+  if (Array.isArray(slugData) && slugData.length > 0) {
+    // Deja cree (replay de webhook), on update juste le stripe info
+    return await linkStripeToEntreprise(sbUrl, sbKey, stripeKey, slugData[0].id, session);
+  }
+
+  // 1. Cree le user dans auth.users
+  let userId;
+  const listRes = await fetch(`${sbUrl}/auth/v1/admin/users?email=${encodeURIComponent(email)}`, { headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` } });
+  if (listRes.ok) {
+    const ud = await listRes.json();
+    const existing = (ud.users || []).find(u => u.email?.toLowerCase() === email.toLowerCase());
+    if (existing) {
+      userId = existing.id;
+    }
+  }
+  if (!userId) {
+    const createRes = await fetch(`${sbUrl}/auth/v1/admin/users`, {
+      method: 'POST',
+      headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: { nom_marque, source: 'signup_stripe' }
+      })
+    });
+    if (!createRes.ok) {
+      const t = await createRes.text();
+      throw new Error('Create auth user failed : ' + t);
+    }
+    const created = await createRes.json();
+    userId = created.id;
+  }
+
+  // 2. Cree l'entreprise
+  const trialEnd = session.expires_at ? null : null; // sera mis a jour par fetchSubscription ci-apres
+  const entPayload = {
+    slug,
+    nom_marque,
+    nom_contact: nom_marque,
+    admin_email: email,
+    plan: 'standard',
+    formule: 'standard',
+    cycle: plan, // mensuel | annuel
+    couleur_principale: '#3D6B4F',
+    couleur_secondaire: '#5A8A6A',
+    couleur_topbar: '#1A1A1A',
+    active: true,
+    subscription_status: 'trialing',
+    stripe_customer_id: session.customer,
+    stripe_subscription_id: session.subscription,
+    montant_client_default: 0
+    // Note : renonce_retractation est gardée dans les metadata Stripe (session.metadata.signup_renonce_retractation)
+    // jusqu'à ce qu'on ajoute la colonne dans entreprises. Sans colonne, la creation echouerait.
+  };
+  const entRes = await fetch(`${sbUrl}/rest/v1/entreprises`, {
+    method: 'POST',
+    headers: { ...adminH, Prefer: 'return=representation' },
+    body: JSON.stringify(entPayload)
+  });
+  if (!entRes.ok) {
+    const t = await entRes.text();
+    throw new Error('Create entreprise failed : ' + t);
+  }
+  const entCreated = await entRes.json();
+  const entrepriseId = Array.isArray(entCreated) ? entCreated[0].id : entCreated.id;
+
+  // 3. Lien admins_entreprise
+  const linkRes = await fetch(`${sbUrl}/rest/v1/admins_entreprise`, {
+    method: 'POST',
+    headers: adminH,
+    body: JSON.stringify({ user_id: userId, entreprise_id: entrepriseId, nom: nom_marque })
+  });
+  if (!linkRes.ok) {
+    const t = await linkRes.text();
+    throw new Error('Link admins_entreprise failed : ' + t);
+  }
+
+  // 4. Recup sub Stripe pour avoir les vraies dates trial_end, current_period_end
+  if (session.subscription) {
+    const sub = await fetchSubscription(stripeKey, session.subscription);
+    if (sub) {
+      await updateEntreprise(sbUrl, sbKey, entrepriseId, {
+        subscription_status: sub.status,
+        trial_ends_at: sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null,
+        current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null
+      });
+    }
+  }
+
+  return entrepriseId;
+}
+
+async function linkStripeToEntreprise(sbUrl, sbKey, stripeKey, entrepriseId, session) {
+  const sub = session.subscription ? await fetchSubscription(stripeKey, session.subscription) : null;
+  await updateEntreprise(sbUrl, sbKey, entrepriseId, {
+    stripe_customer_id: session.customer,
+    stripe_subscription_id: session.subscription,
+    subscription_status: sub?.status || 'trialing',
+    trial_ends_at: sub?.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null,
+    current_period_end: sub?.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null
+  });
+  return entrepriseId;
+}
+
 exports.handler = async (event) => {
   const stripeKey = process.env.STRIPE_SECRET_KEY;
   const whSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -81,6 +205,12 @@ exports.handler = async (event) => {
     switch (evt.type) {
       case 'checkout.session.completed': {
         const session = evt.data.object;
+        // Cas 1 : SIGNUP — pas d'entreprise existante, on la cree
+        if (session.metadata?.signup_email && !session.client_reference_id) {
+          await createSignupAccount(sbUrl, sbKey, stripeKey, session);
+          break;
+        }
+        // Cas 2 : UPGRADE/RENEW d'une entreprise existante
         const entrepriseId = session.client_reference_id || session.metadata?.entreprise_id;
         if (!entrepriseId || !session.subscription) break;
         const sub = await fetchSubscription(stripeKey, session.subscription);
