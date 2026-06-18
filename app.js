@@ -707,8 +707,11 @@ async function affCreneaux(sem) {
   crenSel = null;
   let pris = [], crenRecs = [];
   try {
+    // Les créneaux pris sont lus via une fonction sécurisée (creneaux_pris) :
+    // la RLS empêche une cliente de voir les commandes des autres, donc un
+    // simple select ne renverrait que ses propres réservations.
     const [cmdRes, crRes] = await Promise.all([
-      sb.from('commandes').select('creneau, slot_key').eq('semaine_du', sem.id),
+      sb.rpc('creneaux_pris', { p_entreprise: clientProfile.entreprise_id, p_semaine: sem.id }),
       sb.from('creneaux').select('*').eq('semaine', sem.id)
     ]);
     pris = cmdRes.data || [];
@@ -964,15 +967,14 @@ async function confirmerCommande(pop) {
   const instructionsPaiement = CURRENT_BRANDING?.instructions_paiement || '';
   try {
     // Anti double-réservation : re-vérifie que le créneau est toujours libre
-    // juste avant d'insérer (le rendu de la liste peut dater).
+    // juste avant d'insérer (le rendu de la liste peut dater). On passe par la
+    // fonction sécurisée creneaux_pris car la RLS masque les commandes des autres.
     if (crenSel.slotKey) {
-      const { data: dejaPris } = await sb.from('commandes')
-        .select('id')
-        .eq('entreprise_id', clientProfile.entreprise_id)
-        .eq('semaine_du', semSel.id)
-        .eq('slot_key', crenSel.slotKey)
-        .limit(1);
-      if (dejaPris && dejaPris.length) {
+      const { data: dejaPris } = await sb.rpc('creneaux_pris', {
+        p_entreprise: clientProfile.entreprise_id,
+        p_semaine: semSel.id
+      });
+      if (dejaPris && dejaPris.some(p => p.slot_key === crenSel.slotKey)) {
         await creneauDejaPris(pop);
         return;
       }
