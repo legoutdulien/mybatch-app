@@ -248,6 +248,7 @@ function showTab(tab) {
     planning: renderPlanning,
     stats: renderStats,
     recettes: renderRecettes,
+    ingredients: renderIngredients,
     clients: renderClients,
     salaries: renderSalaries,
     creneaux: renderCreneaux,
@@ -1119,6 +1120,130 @@ function promptRayonsPourNouveauxIngredients(newIngs) {
       resolve(null);
     });
   });
+}
+
+// === ONGLET INGREDIENTS ===
+let ingSearch = '';
+let ingRayonFilter = 'all';
+
+// Nombre de recettes (distinctes) qui utilisent un ingredient.
+function ingUsageCount(ingId) {
+  return new Set(DATA.ri.filter(x => x.ingredient_id === ingId).map(x => x.recette_id)).size;
+}
+function ingUsageRecettes(ingId) {
+  const ids = new Set(DATA.ri.filter(x => x.ingredient_id === ingId).map(x => x.recette_id));
+  return DATA.recettes.filter(r => ids.has(r.id)).map(r => r.nom_du_plat);
+}
+
+function renderIngredients() {
+  const search = ingSearch.toLowerCase().trim();
+  const list = DATA.ingredients.filter(i => {
+    if (ingRayonFilter !== 'all' && (i.rayon || 'Autres') !== ingRayonFilter) return false;
+    if (search && !(i.nom || '').toLowerCase().includes(search)) return false;
+    return true;
+  }).sort((a, b) => (a.nom || '').localeCompare(b.nom || ''));
+
+  const chipCss = (active) => active
+    ? 'background:var(--vp);border-color:var(--v3);color:var(--v2);font-weight:600'
+    : 'background:var(--bgc);border-color:var(--bgd);color:var(--txm)';
+  const rayonsPresents = [...new Set(DATA.ingredients.map(i => i.rayon || 'Autres'))].sort();
+  const rayonChips = ['all', ...rayonsPresents].map(c => `<button class="ing-rayon-chip" data-rayon="${escapeAttr(c)}" style="padding:5px 12px;border:1.5px solid;border-radius:16px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:.15s;${chipCss(c === ingRayonFilter)}">${c === 'all' ? 'Tous rayons' : escapeHtml(c)}</button>`).join('');
+
+  const rows = list.map(i => {
+    const usage = ingUsageCount(i.id);
+    const u = i.unite_par_defaut && i.unite_par_defaut !== 'Unité par défaut' ? i.unite_par_defaut : '';
+    return `<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--bgd);border-radius:10px;background:var(--wh)">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:14px">${escapeHtml(i.nom)}</div>
+        <div style="font-size:12px;color:var(--txm);margin-top:2px">${escapeHtml(i.rayon || 'Autres')}${u ? ' · ' + escapeHtml(u) : ''} · ${usage > 0 ? `${usage} recette${usage > 1 ? 's' : ''}` : 'inutilisé'}</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" data-act="edit-ing" data-id="${i.id}">✏️ Modifier</button>
+      <button class="btn btn-danger btn-sm" data-act="del-ing" data-id="${i.id}"${usage > 0 ? ' disabled title="Utilisé dans des recettes" style="opacity:.4;cursor:not-allowed"' : ''}>🗑️</button>
+    </div>`;
+  }).join('');
+
+  showContent(`<div class="card">
+    <div class="card-head">
+      <div class="card-tit">🥕 Ingrédients <span>${list.length} / ${DATA.ingredients.length}</span></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:18px">
+      <input type="text" id="ingSearch" placeholder="🔍 Rechercher un ingrédient..." value="${escapeAttr(ingSearch)}" style="padding:9px 14px;border:1.5px solid var(--bgd);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:13px;outline:none;background:var(--wh);color:var(--tx);width:100%">
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${rayonChips}</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">${rows || '<div class="empty"><div class="empty-icon">🥕</div><div class="empty-txt">Aucun ingrédient ne correspond aux filtres</div></div>'}</div>
+  </div>`);
+
+  $('ingSearch').addEventListener('input', (e) => {
+    ingSearch = e.target.value;
+    renderIngredients();
+    setTimeout(() => { const inp = $('ingSearch'); if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); } }, 0);
+  });
+  $('content').querySelectorAll('.ing-rayon-chip').forEach(c => c.addEventListener('click', () => { ingRayonFilter = c.dataset.rayon; renderIngredients(); }));
+  $('content').querySelectorAll('[data-act="edit-ing"]').forEach(b => b.addEventListener('click', () => editerIngredient(b.dataset.id)));
+  $('content').querySelectorAll('[data-act="del-ing"]').forEach(b => b.addEventListener('click', () => supprimerIngredient(b.dataset.id)));
+}
+
+function editerIngredient(id) {
+  const ing = DATA.ingredients.find(i => i.id === id); if (!ing) return;
+  const usage = ingUsageCount(id);
+  const recsListe = usage > 0 ? ingUsageRecettes(id).slice(0, 8).join(', ') + (usage > 8 ? '…' : '') : '';
+  const pop = document.createElement('div');
+  pop.className = 'overlay open';
+  pop.style.zIndex = '500';
+  pop.innerHTML = `<div class="modal" style="max-width:480px">
+    <div class="modal-head"><div class="modal-tit">Modifier l'ingrédient</div></div>
+    <div class="form-grid" style="grid-template-columns:1fr">
+      <div class="fg"><label>Nom *</label><input id="ingEditNom" type="text" value="${escapeAttr(ing.nom || '')}"></div>
+      <div class="fg"><label>Unité par défaut</label><input id="ingEditUnite" type="text" list="dlUnites" value="${escapeAttr(ing.unite_par_defaut && ing.unite_par_defaut !== 'Unité par défaut' ? ing.unite_par_defaut : '')}" placeholder="g, mL, pièce..."></div>
+      <div class="fg"><label>Rayon (pour la liste de courses)</label>
+        <select id="ingEditRayon">
+          ${RAYONS_LIST.map(r => `<option value="${escapeHtml(r)}"${(ing.rayon || 'Autres') === r ? ' selected' : ''}>${escapeHtml(r)}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <p style="font-size:12px;color:var(--txm);margin-top:8px">${usage > 0 ? `Utilisé dans ${usage} recette${usage > 1 ? 's' : ''} : ${escapeHtml(recsListe)}. Les changements s'appliqueront partout.` : 'Cet ingrédient n\'est utilisé dans aucune recette.'}</p>
+    <div style="display:flex;gap:10px;margin-top:18px">
+      <button id="ingEditOk" class="btn btn-primary" style="flex:1">✓ Enregistrer</button>
+      <button id="ingEditCancel" class="btn btn-ghost">Annuler</button>
+    </div>
+  </div>`;
+  document.body.appendChild(pop);
+  populateUnitDatalist();
+  pop.querySelector('#ingEditCancel').addEventListener('click', () => pop.remove());
+  pop.querySelector('#ingEditOk').addEventListener('click', async () => {
+    const nom = pop.querySelector('#ingEditNom').value.trim();
+    if (!nom) { toast('⚠️ Le nom est obligatoire'); return; }
+    const unite = pop.querySelector('#ingEditUnite').value.trim() || null;
+    const rayon = pop.querySelector('#ingEditRayon').value;
+    const btn = pop.querySelector('#ingEditOk'); btn.disabled = true; btn.textContent = '⏳...';
+    try {
+      const { error } = await sb.from('ingredients').update({ nom, unite_par_defaut: unite, rayon }).eq('id', id);
+      if (error) throw error;
+      Object.assign(ing, { nom, unite_par_defaut: unite, rayon });
+      pop.remove();
+      toast('✓ Ingrédient mis à jour');
+      populateUnitDatalist();
+      renderIngredients();
+    } catch (e) {
+      btn.disabled = false; btn.textContent = '✓ Enregistrer';
+      toast('Erreur : ' + (e.message || e));
+    }
+  });
+}
+
+async function supprimerIngredient(id) {
+  const ing = DATA.ingredients.find(i => i.id === id); if (!ing) return;
+  if (ingUsageCount(id) > 0) { toast('⚠️ Ingrédient utilisé dans des recettes — impossible de supprimer'); return; }
+  if (!confirm(`Supprimer l'ingrédient "${ing.nom}" ?`)) return;
+  try {
+    const { error } = await sb.from('ingredients').delete().eq('id', id);
+    if (error) throw error;
+    DATA.ingredients = DATA.ingredients.filter(i => i.id !== id);
+    toast('🗑️ Ingrédient supprimé');
+    renderIngredients();
+  } catch (e) {
+    toast('Erreur : ' + (e.message || e));
+  }
 }
 
 async function cycleEtatRecette(id, currentEtat) {
