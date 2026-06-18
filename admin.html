@@ -402,12 +402,8 @@ body.plan-standard option.founder-only-opt{display:none}
     </div>
     <div class="form-grid">
       <div class="fg"><label>Nom du plat *</label><input id="rNom" type="text" placeholder="Ex: Ratatouille provencale"></div>
-      <div class="fg"><label>Categorie</label>
-        <select id="rCat">
-          <option>Viande</option><option>Poisson</option><option>Végé</option>
-          <option>Poulet</option><option>Pâtes</option><option>Cuisine du monde</option>
-          <option>Post partum</option>
-        </select>
+      <div class="fg" style="grid-column:1/-1"><label>Catégories (une ou plusieurs)</label>
+        <div id="rCats" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px"></div>
       </div>
       <div class="fg"><label>Frigo (jours)</label><input id="rFrigo" type="number" min="1" max="10" value="5"></div>
       <div class="fg"><label>Statut</label>

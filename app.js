@@ -614,7 +614,7 @@ function renderAVenirGrid() {
   const search = aVenirSearch.toLowerCase().trim();
   const aVenir = recettes.filter(r => {
     if (getEtat(r) !== 'a_venir') return false;
-    if (aVenirCatFilter !== 'all' && r.categorie !== aVenirCatFilter) return false;
+    if (aVenirCatFilter !== 'all' && !catsOf(r).includes(aVenirCatFilter)) return false;
     if (search && !(r.nom_du_plat || '').toLowerCase().includes(search)) return false;
     return true;
   });
@@ -628,7 +628,7 @@ function renderAVenirGrid() {
       ${rec.photo_url ? `<img class="pimg" src="${escapeHtml(rec.photo_url)}" alt="${escapeHtml(rec.nom_du_plat)}" loading="lazy">` : `<div class="pph">🍽️</div>`}
       <div class="pinfo">
         <div class="ptop">
-          <span class="pcat ${catCls(rec.categorie)}">${escapeHtml(rec.categorie || 'Plat')}</span>
+          <span style="display:inline-flex;flex-wrap:wrap;gap:4px">${(catsOf(rec).length ? catsOf(rec) : ['Plat']).map(c => `<span class="pcat ${catCls(c)}">${escapeHtml(c)}</span>`).join('')}</span>
         </div>
         <div class="pnom">${escapeHtml(rec.nom_du_plat)}</div>
         <div style="font-size:11px;font-style:italic;color:var(--txl);margin-top:6px">Disponible prochainement</div>
@@ -756,9 +756,15 @@ async function affCreneaux(sem) {
   });
 }
 
-const CATS_FIXED = ['Viande', 'Poisson', 'Végé', 'Poulet', 'Pâtes', 'Cuisine du monde', 'Post partum'];
+const CATS_FIXED = ['Viande', 'Poisson', 'Végé', 'Poulet', 'Pâtes', 'Cuisine du monde', 'Post partum', 'Sans porc'];
 let platSearch = '';
 let platCatFilter = 'all';
+
+// Catégories d'une recette : tableau `categories`, repli sur l'ancien champ `categorie`.
+function catsOf(rec) {
+  if (rec && Array.isArray(rec.categories) && rec.categories.length) return rec.categories;
+  return rec && rec.categorie ? [rec.categorie] : [];
+}
 
 function renderPlatChips(containerId, current, onSelect, includeFavoris = false) {
   const c = $(containerId); if (!c) return;
@@ -781,7 +787,7 @@ function renderPlats() {
   const actifs = recettes.filter(r => {
     if (getEtat(r) !== 'actif') return false;
     if (platCatFilter === 'favoris' && !favoris.has(r.id)) return false;
-    if (platCatFilter !== 'all' && platCatFilter !== 'favoris' && r.categorie !== platCatFilter) return false;
+    if (platCatFilter !== 'all' && platCatFilter !== 'favoris' && !catsOf(r).includes(platCatFilter)) return false;
     if (search && !(r.nom_du_plat || '').toLowerCase().includes(search)) return false;
     return true;
   });
@@ -803,7 +809,7 @@ function renderPlats() {
       ${rec.photo_url ? `<img class="pimg" src="${escapeHtml(rec.photo_url)}" alt="${escapeHtml(rec.nom_du_plat)}" loading="lazy">` : `<div class="pph">🍽️</div>`}
       <div class="pinfo">
         <div class="ptop">
-          <span class="pcat ${catCls(rec.categorie)}">${escapeHtml(rec.categorie || 'Plat')}</span>
+          <span style="display:inline-flex;flex-wrap:wrap;gap:4px">${(catsOf(rec).length ? catsOf(rec) : ['Plat']).map(c => `<span class="pcat ${catCls(c)}">${escapeHtml(c)}</span>`).join('')}</span>
           <button class="bing" data-act="ing" data-id="${rec.id}">🥕 Ingredients</button>
         </div>
         <div class="pnom">${escapeHtml(rec.nom_du_plat)}</div>

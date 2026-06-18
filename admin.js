@@ -922,15 +922,47 @@ function renderStats() {
 }
 
 // --- RECETTES ---
-const CATS_FIXED = ['Viande', 'Poisson', 'Végé', 'Poulet', 'Pâtes', 'Cuisine du monde', 'Post partum'];
+const CATS_FIXED = ['Viande', 'Poisson', 'Végé', 'Poulet', 'Pâtes', 'Cuisine du monde', 'Post partum', 'Sans porc'];
 let recetteSearch = '';
 let recetteCatFilter = 'all';
 let recetteEtatFilter = 'all';
 
+// Catégories d'une recette : tableau `categories`, avec repli sur l'ancien
+// champ texte `categorie` pour les recettes pas encore migrées.
+function catsOf(rec) {
+  if (rec && Array.isArray(rec.categories) && rec.categories.length) return rec.categories;
+  return rec && rec.categorie ? [rec.categorie] : [];
+}
+function recetteMatchCat(rec, cat) {
+  if (cat === 'all') return true;
+  return catsOf(rec).includes(cat);
+}
+// Remplit le bloc de cases à cocher des catégories dans le formulaire recette.
+function renderRCats(selected = []) {
+  const c = $('rCats'); if (!c) return;
+  const sel = new Set(selected);
+  c.innerHTML = CATS_FIXED.map(cat => {
+    const on = sel.has(cat);
+    return `<label style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1.5px solid ${on ? 'var(--v2)' : 'var(--bgd)'};border-radius:16px;font-size:13px;cursor:pointer;background:${on ? 'var(--vp)' : 'var(--wh)'};color:${on ? 'var(--v2)' : 'var(--tx)'};font-weight:${on ? '600' : '400'}">
+      <input type="checkbox" class="rcat-cb" value="${escapeAttr(cat)}" ${on ? 'checked' : ''} style="cursor:pointer">${escapeHtml(cat)}</label>`;
+  }).join('');
+  // Reflète l'état coché sur le style du label (sans re-render)
+  c.querySelectorAll('.rcat-cb').forEach(cb => cb.addEventListener('change', () => {
+    const lab = cb.closest('label'); const on = cb.checked;
+    lab.style.borderColor = on ? 'var(--v2)' : 'var(--bgd)';
+    lab.style.background = on ? 'var(--vp)' : 'var(--wh)';
+    lab.style.color = on ? 'var(--v2)' : 'var(--tx)';
+    lab.style.fontWeight = on ? '600' : '400';
+  }));
+}
+function getRCats() {
+  return Array.from(document.querySelectorAll('#rCats .rcat-cb:checked')).map(cb => cb.value);
+}
+
 function renderRecettes() {
   const search = recetteSearch.toLowerCase().trim();
   const filtered = DATA.recettes.filter(r => {
-    if (recetteCatFilter !== 'all' && r.categorie !== recetteCatFilter) return false;
+    if (!recetteMatchCat(r, recetteCatFilter)) return false;
     if (recetteEtatFilter !== 'all' && getEtat(r) !== recetteEtatFilter) return false;
     if (search && !(r.nom_du_plat || '').toLowerCase().includes(search)) return false;
     return true;
@@ -947,7 +979,7 @@ function renderRecettes() {
       ${r.photo_url ? `<img src="${escapeHtml(r.photo_url)}" style="width:100%;height:130px;object-fit:cover;display:block">` : `<div class="rec-img">🍽️</div>`}
       <div class="rec-body">
         <div class="rec-nom">${escapeHtml(r.nom_du_plat)}</div>
-        <div class="rec-cat">${escapeHtml(r.categorie || '–')} · ${nbIngs} ingr. · ${r.frigo_en_jours || '?'}j frigo</div>
+        <div class="rec-cat">${escapeHtml(catsOf(r).join(', ') || '–')} · ${nbIngs} ingr. · ${r.frigo_en_jours || '?'}j frigo</div>
         <div class="rec-footer">
           <button data-act="cycle-rec" data-id="${r.id}" data-etat="${etat}" title="Clic pour changer le statut" style="padding:4px 10px;border-radius:16px;font-size:11px;font-weight:500;cursor:pointer;border:none;font-family:'DM Sans',sans-serif;${badgeStyle}">${badgeTxt}</button>
           <button class="btn btn-ghost btn-sm" data-act="dup-rec" data-id="${r.id}" title="Dupliquer">📋</button>
@@ -983,7 +1015,7 @@ function renderRecettes() {
     // re-render uniquement la grille pour ne pas perdre le focus
     const filtered2 = DATA.recettes.filter(r => {
       const s = recetteSearch.toLowerCase().trim();
-      if (recetteCatFilter !== 'all' && r.categorie !== recetteCatFilter) return false;
+      if (!recetteMatchCat(r, recetteCatFilter)) return false;
       if (recetteEtatFilter !== 'all' && getEtat(r) !== recetteEtatFilter) return false;
       if (s && !(r.nom_du_plat || '').toLowerCase().includes(s)) return false;
       return true;
@@ -1019,7 +1051,7 @@ function dupliquerRecette(id) {
   const rec = getRecette(id); if (!rec) return;
   $('rId').value = '';
   $('rNom').value = (rec.nom_du_plat || '') + ' (copie)';
-  $('rCat').value = rec.categorie || 'Viande';
+  renderRCats(catsOf(rec));
   $('rFrigo').value = rec.frigo_en_jours || 5;
   $('rPrep').value = rec.instructions_preparation || '';
   $('rRechauffage').value = rec.instructions_rechauffage || '';
@@ -1173,7 +1205,7 @@ function nouvelleRecette() {
   $('rPhotoPreview').innerHTML = '🍽️';
   $('rPhotoNom').textContent = 'Aucune photo selectionnee';
   $('btnUpload').textContent = '📷 Choisir une photo'; $('btnUpload').disabled = false;
-  $('rCat').value = 'Viande';
+  renderRCats([]);
   $('rFrigo').value = '5';
   $('rEtat').value = 'actif';
   $('modalRecTit').textContent = 'Nouvelle recette';
@@ -1184,7 +1216,7 @@ function editerRecette(id) {
   const rec = getRecette(id); if (!rec) return;
   $('rId').value = id;
   $('rNom').value = rec.nom_du_plat || '';
-  $('rCat').value = rec.categorie || 'Viande';
+  renderRCats(catsOf(rec));
   $('rFrigo').value = rec.frigo_en_jours || 5;
   $('rPrep').value = rec.instructions_preparation || '';
   $('rRechauffage').value = rec.instructions_rechauffage || '';
@@ -1286,6 +1318,7 @@ async function saveRecette() {
 
   // === Validation ===
   if (!nom) { toast('⚠️ Le nom du plat est obligatoire'); return; }
+  if (getRCats().length === 0) { toast('⚠️ Choisissez au moins une catégorie'); return; }
   if (!id && !(await checkPlanLimit('recettes', 'recettes'))) return;
 
   // Doublon de nom (uniquement a la creation)
@@ -1336,9 +1369,11 @@ async function saveRecette() {
   try {
     const photoUrl = ($('rPhoto').value || '').trim();
     const etat = $('rEtat').value;
+    const cats = getRCats();
     const payload = {
       nom_du_plat: nom,
-      categorie: $('rCat').value,
+      categories: cats,
+      categorie: cats[0] || null,
       frigo_en_jours: parseInt($('rFrigo').value, 10) || 5,
       instructions_preparation: $('rPrep').value,
       instructions_rechauffage: $('rRechauffage').value,
@@ -2662,7 +2697,7 @@ function buildAriaSys() {
       const u = ing && ing.unite_par_defaut !== 'Unité par défaut' ? (ing.unite_par_defaut || '') : '';
       return `${ing ? ing.nom : '?'}${x.quantite_par_portion ? ` (${x.quantite_par_portion}${u ? ' ' + u : ''})` : ''}`;
     });
-    return { nom: r.nom_du_plat, cat: r.categorie, actif: r.active, frigo: r.frigo_en_jours, prep: r.instructions_preparation || '', rech: r.instructions_rechauffage || '', cong: r.congelation || '', ings };
+    return { nom: r.nom_du_plat, cat: catsOf(r).join(', '), actif: r.active, frigo: r.frigo_en_jours, prep: r.instructions_preparation || '', rech: r.instructions_rechauffage || '', cong: r.congelation || '', ings };
   });
   const cmdParSem = {};
   DATA.commandes.forEach(c => {
