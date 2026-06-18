@@ -738,7 +738,7 @@ async function affCreneaux(sem) {
       const ferme = !isActif(j, slot.nom_slot);
       const el = document.createElement('div');
       el.className = 'citem' + ((taken || ferme) ? ' cpris' : '');
-      const tag = taken ? '<span class="cpris-tag">Complet</span>' : ferme ? '<span class="cpris-tag">Ferme</span>' : '';
+      const tag = taken ? '<span class="cpris-tag">Indisponible</span>' : ferme ? '<span class="cpris-tag">Ferme</span>' : '';
       el.innerHTML = `<div class="cjour">${escapeHtml(jl)}</div><div style="display:flex;align-items:center;justify-content:space-between"><span>${h}</span>${tag}</div>`;
       if (!taken && !ferme) {
         el.addEventListener('click', () => {
@@ -1039,12 +1039,12 @@ async function confirmerCommande(pop) {
   }
 }
 
-// Affiche un message clair quand le créneau choisi vient d'être réservé par
-// quelqu'un d'autre, ferme le récap et recharge la liste des créneaux.
+// Le créneau choisi a été pris entre-temps : ferme le récap et recharge la
+// liste des créneaux (le créneau apparaîtra alors en « Indisponible »),
+// sans message popup.
 async function creneauDejaPris(pop) {
   if (pop) pop.remove();
   crenSel = null;
-  showToast('Ce créneau vient d\'être réservé par une autre personne. Choisissez-en un autre.', 'err');
   if (semSel) await affCreneaux(semSel);
   majBarre();
 }
