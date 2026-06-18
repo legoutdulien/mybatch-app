@@ -963,6 +963,20 @@ async function confirmerCommande(pop) {
   btn.style.cursor = 'not-allowed';
   const instructionsPaiement = CURRENT_BRANDING?.instructions_paiement || '';
   try {
+    // Anti double-réservation : re-vérifie que le créneau est toujours libre
+    // juste avant d'insérer (le rendu de la liste peut dater).
+    if (crenSel.slotKey) {
+      const { data: dejaPris } = await sb.from('commandes')
+        .select('id')
+        .eq('entreprise_id', clientProfile.entreprise_id)
+        .eq('semaine_du', semSel.id)
+        .eq('slot_key', crenSel.slotKey)
+        .limit(1);
+      if (dejaPris && dejaPris.length) {
+        await creneauDejaPris(pop);
+        return;
+      }
+    }
     const payload = {
       client_id: clientProfile.id,
       entreprise_id: clientProfile.entreprise_id,
@@ -1009,6 +1023,12 @@ async function confirmerCommande(pop) {
     btn.style.opacity = '1';
     btn.style.cursor = 'pointer';
     const msg = (e && e.message) || String(e);
+    // Conflit de créneau : deux clientes ont validé le même slot quasi en même temps.
+    // L'index unique en base (entreprise_id, semaine_du, slot_key) rejette le 2e insert.
+    if (e?.code === '23505' || /duplicate key|uniq_commande_slot|créneau/i.test(msg)) {
+      await creneauDejaPris(pop);
+      return;
+    }
     // Si le trigger DB rejette pour limite mensuelle, on affiche un message plus explicite
     if (/limite atteinte/i.test(msg) || /commandes\/mois/i.test(msg)) {
       const cuisiniere = CURRENT_BRANDING?.nom_contact || 'votre cuisiniere';
@@ -1017,6 +1037,16 @@ async function confirmerCommande(pop) {
       showToast('Erreur: ' + msg, 'err');
     }
   }
+}
+
+// Affiche un message clair quand le créneau choisi vient d'être réservé par
+// quelqu'un d'autre, ferme le récap et recharge la liste des créneaux.
+async function creneauDejaPris(pop) {
+  if (pop) pop.remove();
+  crenSel = null;
+  showToast('Ce créneau vient d\'être réservé par une autre personne. Choisissez-en un autre.', 'err');
+  if (semSel) await affCreneaux(semSel);
+  majBarre();
 }
 
 // --- branding dynamique selon le sous-domaine ---
