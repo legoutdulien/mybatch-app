@@ -105,7 +105,6 @@ async function loadAdminFromSession() {
     }
     const cfg = await r.json();
     SB_URL = cfg.url;
-    SB_SERVICE_KEY = cfg.key;
     CURRENT_ENTREPRISE_ID = cfg.entreprise_id;
     CURRENT_ADMIN_NOM = cfg.nom || '';
     CURRENT_ADMIN_USER_ID = cfg.user_id || null;
@@ -129,9 +128,10 @@ async function loadAdminFromSession() {
       if (tBox) tBox.style.display = 'flex';
     }
     if (cfg.couleur_topbar) document.documentElement.style.setProperty('--topbar-bg', cfg.couleur_topbar);
-    sb = window.supabase.createClient(SB_URL, SB_SERVICE_KEY, {
-      auth: { persistSession: false, autoRefreshToken: false }
-    });
+    // SECURITE : l'admin travaille avec SA propre session (cle anon + RLS).
+    // Le service_role n'est plus jamais expose au navigateur ; les operations
+    // privilegiees passent par /.netlify/functions/admin-action.
+    sb = sbAuth;
     $('pLogin').style.display = 'none';
     $('pApp').style.display = 'flex';
     chargerTout();
@@ -162,11 +162,9 @@ async function chargerTout() {
       scoped(sb.from('ingredients').select('*')).order('nom', { ascending: true }),
       scoped(sb.from('creneaux').select('*')),
       scoped(sb.from('creneaux_template').select('*')),
-      // Founder voit toutes les entreprises (super-admin) SAUF LGDL (qui est gere via app.legoutdulien.com)
-      // Le filtre nom_marque ILIKE exclut "Le Gout du Lien" sans avoir besoin de son UUID
-      isFounder()
-        ? sb.from('entreprises').select('*').not('nom_marque', 'ilike', '%goût du lien%').order('nom_marque', { ascending: true })
-        : sb.from('entreprises').select('*').eq('id', CURRENT_ENTREPRISE_ID),
+      // Chaque admin lit sa propre entreprise via RLS. Le founder recupere TOUTES
+      // les entreprises juste apres, cote serveur (cross-tenant).
+      sb.from('entreprises').select('*').eq('id', CURRENT_ENTREPRISE_ID),
       scoped(sb.from('forfaits').select('*')).order('ordre', { ascending: true })
     ]);
     if (cmdR.error) throw cmdR.error;
@@ -184,6 +182,13 @@ async function chargerTout() {
     DATA.creneaux = crenR.data || [];
     DATA.creneauxTemplate = ctR.data || [];
     DATA.entreprises = entR.data || [];
+    // Founder (super-admin) : recupere toutes les entreprises cote serveur
+    if (isFounder()) {
+      try {
+        const { entreprises } = await adminAction('list_entreprises');
+        if (Array.isArray(entreprises)) DATA.entreprises = entreprises;
+      } catch (e) { /* on garde au moins l'entreprise courante */ }
+    }
     DATA.forfaits = (forfR && forfR.data) || [];
 
     // recettes_ingredients : pas de colonne entreprise_id, on filtre via les recettes chargees
@@ -1612,52 +1617,21 @@ function editerClient(id) {
   openModal('modalClient');
 }
 
-async function adminCreateAuthUser({ email, password, type, nom, telephone, adresse, notes }) {
-  const r = await fetch(`${SB_URL}/auth/v1/admin/users`, {
+// Operations privilegiees (creation/maj/suppression de comptes, super-admin) :
+// elles passent par /.netlify/functions/admin-action qui detient le service_role
+// COTE SERVEUR et scope chaque action a l'entreprise de l'appelant. Le navigateur
+// n'a jamais la cle maitre.
+async function adminAction(action, payload = {}) {
+  const { data: { session } } = await sbAuth.auth.getSession();
+  if (!session) { window.location.href = '/'; throw new Error('Session expiree'); }
+  const r = await fetch('/.netlify/functions/admin-action', {
     method: 'POST',
-    headers: {
-      apikey: SB_SERVICE_KEY,
-      Authorization: `Bearer ${SB_SERVICE_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      email, password, email_confirm: true,
-      user_metadata: { type, nom, telephone, adresse, notes }
-    })
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ access_token: session.access_token, action, payload })
   });
-  const d = await r.json();
-  if (!r.ok) throw new Error(d.msg || d.message || `${r.status}`);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || ('Erreur ' + r.status));
   return d;
-}
-
-async function adminUpdateAuthUser(id, { email, password }) {
-  const body = {};
-  if (email) body.email = email;
-  if (password) body.password = password;
-  if (Object.keys(body).length === 0) return null;
-  const r = await fetch(`${SB_URL}/auth/v1/admin/users/${id}`, {
-    method: 'PUT',
-    headers: {
-      apikey: SB_SERVICE_KEY,
-      Authorization: `Bearer ${SB_SERVICE_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(body)
-  });
-  const d = await r.json();
-  if (!r.ok) throw new Error(d.msg || d.message || `${r.status}`);
-  return d;
-}
-
-async function adminDeleteAuthUser(id) {
-  const r = await fetch(`${SB_URL}/auth/v1/admin/users/${id}`, {
-    method: 'DELETE',
-    headers: { apikey: SB_SERVICE_KEY, Authorization: `Bearer ${SB_SERVICE_KEY}` }
-  });
-  if (!r.ok && r.status !== 404) {
-    const d = await r.json().catch(() => ({}));
-    throw new Error(d.msg || d.message || `${r.status}`);
-  }
 }
 
 async function saveClient() {
@@ -1676,7 +1650,7 @@ async function saveClient() {
   try {
     if (id) {
       if (mdp || email !== (getClient(id).email)) {
-        await adminUpdateAuthUser(id, { email: email !== getClient(id).email ? email : undefined, password: mdp || undefined });
+        await adminAction('update_user_auth', { id, type: 'client', email: email !== getClient(id).email ? email : undefined, password: mdp || undefined });
       }
       const payload = { nom, email, telephone: telephone || null, adresse: adresse || null, notes: notes || null, nombre_portions: portions };
       const { error } = await sb.from('clients').update(payload).eq('id', id);
@@ -1685,12 +1659,8 @@ async function saveClient() {
       toast('✅ Client modifie');
     } else {
       if (!mdp) { toast('⚠️ Mot de passe obligatoire pour creation'); return; }
-      const u = await adminCreateAuthUser({ email, password: mdp, type: 'client', nom, telephone, adresse, notes });
-      await new Promise(r => setTimeout(r, 200));
-      // Update le profil avec nombre_portions + entreprise_id (le trigger ne les set pas)
-      await sb.from('clients').update({ nombre_portions: portions, entreprise_id: CURRENT_ENTREPRISE_ID }).eq('id', u.id);
-      const { data, error } = await sb.from('clients').select('*').eq('id', u.id).single();
-      if (!error && data) DATA.clients.push(data);
+      const { profile } = await adminAction('create_user', { email, password: mdp, type: 'client', nom, telephone, adresse, notes, nombre_portions: portions });
+      if (profile) DATA.clients.push(profile);
       toast('✅ Client cree');
     }
     closeModal('modalClient'); renderClients();
@@ -1702,10 +1672,7 @@ async function saveClient() {
 async function supprimerClient(id) {
   if (!confirm('Supprimer ce client et toutes ses donnees (commandes, favoris, compte) ?')) return;
   try {
-    await sb.from('favoris').delete().eq('client_id', id);
-    await sb.from('commandes').delete().eq('client_id', id);
-    await sb.from('clients').delete().eq('id', id);
-    await adminDeleteAuthUser(id);
+    await adminAction('delete_user', { id, type: 'client' });
     const [{ data: cliData }, { data: cmdData }] = await Promise.all([
       scoped(sb.from('clients').select('*')),
       scoped(sb.from('commandes').select('*'))
@@ -1773,7 +1740,7 @@ async function saveSalarie() {
   try {
     if (id) {
       if (mdp || email !== getSalarie(id).email) {
-        await adminUpdateAuthUser(id, { email: email !== getSalarie(id).email ? email : undefined, password: mdp || undefined });
+        await adminAction('update_user_auth', { id, type: 'salarie', email: email !== getSalarie(id).email ? email : undefined, password: mdp || undefined });
       }
       const payload = { nom, email, telephone: telephone || null };
       const { error } = await sb.from('salaries').update(payload).eq('id', id);
@@ -1782,11 +1749,8 @@ async function saveSalarie() {
       toast('✅ Partenaire modifie');
     } else {
       if (!mdp) { toast('⚠️ Mot de passe obligatoire pour creation'); return; }
-      const u = await adminCreateAuthUser({ email, password: mdp, type: 'salarie', nom, telephone });
-      await new Promise(r => setTimeout(r, 200));
-      await sb.from('salaries').update({ entreprise_id: CURRENT_ENTREPRISE_ID }).eq('id', u.id);
-      const { data, error } = await sb.from('salaries').select('*').eq('id', u.id).single();
-      if (!error && data) DATA.salaries.push(data);
+      const { profile } = await adminAction('create_user', { email, password: mdp, type: 'salarie', nom, telephone });
+      if (profile) DATA.salaries.push(profile);
       toast('✅ Partenaire cree');
     }
     closeModal('modalSalarie'); renderSalaries();
@@ -1797,9 +1761,7 @@ async function saveSalarie() {
 async function supprimerSalarie(id) {
   if (!confirm('Supprimer ce partenaire (les commandes assignees seront desassignees) ?')) return;
   try {
-    await sb.from('commandes').update({ assigne_a_id: null }).eq('assigne_a_id', id);
-    await sb.from('salaries').delete().eq('id', id);
-    await adminDeleteAuthUser(id);
+    await adminAction('delete_user', { id, type: 'salarie' });
     // Refetch frais depuis la DB pour eviter toute trace locale (scope par entreprise)
     const [{ data: salData }, { data: cmdData }] = await Promise.all([
       scoped(sb.from('salaries').select('*')),
@@ -2223,7 +2185,7 @@ async function saveParametres() {
           uid = sessionData?.user?.id;
         }
         if (!uid) throw new Error('Session perdue');
-        await adminUpdateAuthUser(uid, authUpdate);
+        await adminAction('update_user_auth', { id: uid, email: authUpdate.email, password: authUpdate.password });
       } catch (eAuth) {
         $('prmStatus').textContent = '❌ Auth : ' + (eAuth.message || eAuth);
         return;
@@ -2266,11 +2228,8 @@ async function loadPlatformStats() {
   try {
     const ymThis = new Date().toISOString().slice(0, 7);
     const ymPrev = (() => { const d = new Date(); d.setMonth(d.getMonth() - 1); return d.toISOString().slice(0, 7); })();
-    const [cliR, recR, cmdR] = await Promise.all([
-      sb.from('clients').select('entreprise_id'),
-      sb.from('recettes').select('entreprise_id'),
-      sb.from('commandes').select('entreprise_id, montant, semaine_du, statut')
-    ]);
+    const ps = await adminAction('platform_stats');
+    const cliR = { data: ps.clients }, recR = { data: ps.recettes }, cmdR = { data: ps.commandes };
     const stats = {};
     DATA.entreprises.forEach(e => {
       stats[e.id] = { clients: 0, recettes: 0, commandes: 0, cmdMois: 0, caMois: 0, lastCmd: null };
@@ -2554,76 +2513,24 @@ async function saveEntreprise() {
 
   try {
     if (id) {
-      // Modification : on capture l'ancien email AVANT toute mutation pour
-      // pouvoir detecter un changement d'email
       const oldEnt = DATA.entreprises.find(x => x.id === id);
       const oldEmail = oldEnt?.admin_email || '';
-
-      // Si email ou password change, on met a jour le compte Supabase auth associe
-      const { data: link } = await sb.from('admins_entreprise')
-        .select('user_id').eq('entreprise_id', id).maybeSingle();
-      if (link && link.user_id) {
-        const authUpdate = {};
-        if (email && email !== oldEmail) authUpdate.email = email;
-        if (pwd) authUpdate.password = pwd;
-        if (Object.keys(authUpdate).length) {
-          await adminUpdateAuthUser(link.user_id, authUpdate);
-        }
-      }
-
-      // Puis on met a jour la ligne entreprises
-      const { error } = await sb.from('entreprises').update(payload).eq('id', id);
-      if (error) throw error;
+      await adminAction('save_entreprise', {
+        id,
+        fields: payload,
+        email: (email && email !== oldEmail) ? email : undefined,
+        password: pwd || undefined
+      });
       if (oldEnt) Object.assign(oldEnt, payload);
       toast('✅ Cuisinière modifiée');
     } else {
-      // Creation : 1) entreprise, 2) compte auth, 3) lien admins_entreprise
-      const { data: ent, error } = await sb.from('entreprises').insert({ ...payload, active: true }).select().single();
-      if (error) throw error;
-
-      let authUser;
-      try {
-        authUser = await adminCreateAuthUser({ email, password: pwd, type: 'admin', nom: contact });
-      } catch (eAuth) {
-        // Rollback : on supprime l'entreprise pour ne pas laisser un orphelin
-        await sb.from('entreprises').delete().eq('id', ent.id);
-        throw new Error('Creation compte auth echouee : ' + eAuth.message);
-      }
-
-      // Le trigger Postgres cree une ligne clients par defaut a chaque user auth.
-      // Pour un admin d'entreprise on supprime ces lignes parasites avant de lier.
-      await sb.from('clients').delete().eq('id', authUser.id);
-      await sb.from('salaries').delete().eq('id', authUser.id);
-
-      const { error: linkErr } = await sb.from('admins_entreprise').insert({
-        user_id: authUser.id,
-        entreprise_id: ent.id,
-        nom: contact
+      // Creation cote serveur (entreprise + compte auth + lien + seed ingredients)
+      const { entreprise: ent } = await adminAction('save_entreprise', {
+        fields: payload,
+        email, password: pwd, contact,
+        seed_from_slug: 'legoutdulien'
       });
-      if (linkErr) {
-        // Rollback complet
-        await adminDeleteAuthUser(authUser.id);
-        await sb.from('entreprises').delete().eq('id', ent.id);
-        throw linkErr;
-      }
-
-      // Starter pack : copie les ingredients de Le Gout du Lien comme base
-      // La nouvelle entreprise peut completer / modifier / supprimer chez elle
-      // sans impacter les donnees source. Non bloquant si echec.
-      try {
-        const lgl = DATA.entreprises.find(x => x.slug === 'legoutdulien');
-        if (lgl) {
-          const { data: ingsTpl } = await sb.from('ingredients')
-            .select('nom, unite_par_defaut, rayon')
-            .eq('entreprise_id', lgl.id);
-          if (Array.isArray(ingsTpl) && ingsTpl.length) {
-            const seed = ingsTpl.map(i => ({ ...i, entreprise_id: ent.id }));
-            await sb.from('ingredients').insert(seed);
-          }
-        }
-      } catch (eSeed) { /* silent */ }
-
-      DATA.entreprises.push(ent);
+      if (ent) DATA.entreprises.push(ent);
       const url = slug + '.mybatch.cooking';
       const isFounder = plan === 'founder';
       const formuleLabel = payload.formule === 'premium' ? 'Premium' : 'Standard';
@@ -2644,20 +2551,7 @@ async function supprimerEntreprise(id) {
   const e = DATA.entreprises.find(x => x.id === id); if (!e) return;
   if (!confirm(`⚠️ Supprimer "${e.nom_marque}" ?\nTOUTES ses données (clients, recettes, commandes) seront supprimées définitivement.`)) return;
   try {
-    // Recupere l'admin auth associe pour le supprimer apres l'entreprise
-    const { data: links } = await sb.from('admins_entreprise')
-      .select('user_id').eq('entreprise_id', id);
-
-    const { error } = await sb.from('entreprises').delete().eq('id', id);
-    if (error) throw error;
-
-    // Supprime les comptes auth admin de cette entreprise
-    if (Array.isArray(links)) {
-      for (const l of links) {
-        if (l.user_id) await adminDeleteAuthUser(l.user_id).catch(() => {});
-      }
-    }
-
+    await adminAction('delete_entreprise', { id });
     DATA.entreprises = DATA.entreprises.filter(x => x.id !== id);
     toast('🗑️ Entreprise supprimée');
     renderEntreprises();

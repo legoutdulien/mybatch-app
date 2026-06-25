@@ -58,7 +58,7 @@ exports.handler = async (event) => {
         statusCode: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          url, key: serviceKey,
+          url,
           entreprise_id: admins[0].entreprise_id,
           nom: admins[0].nom,
           plan: ent.plan || 'standard',
@@ -82,7 +82,7 @@ exports.handler = async (event) => {
     return {
       statusCode: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, key: serviceKey, legacy: true })
+      body: JSON.stringify({ url, legacy: true })
     };
   }
 
