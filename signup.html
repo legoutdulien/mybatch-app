@@ -150,15 +150,17 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--i
       <h2>Vos infos</h2>
       <p class="sub">Création de votre espace personnel my batch. Vous pourrez tout modifier après.</p>
 
+      <div style="background:#fff6ec;border-left:3px solid #f78a0c;padding:9px 13px;border-radius:6px;margin-bottom:16px;font-size:12.5px;color:#5c4a30;line-height:1.45">⚠️ <strong>Cet espace est réservé aux batchcookeuses</strong> (professionnelles). Si vous êtes une <strong>cliente</strong>, ne créez pas de compte ici : connectez-vous directement avec les identifiants fournis par votre batchcookeuse.</div>
+
       <div class="field">
         <label for="nom_marque">Nom de votre activité *</label>
-        <input type="text" id="nom_marque" placeholder="Ex : Le Goût du Lien" autocomplete="organization">
+        <input type="text" id="nom_marque" placeholder="Ex : Les Bons Petits Plats" autocomplete="organization">
         <div class="hint">C'est le nom que verront vos clientes. Modifiable ensuite.</div>
       </div>
 
       <div class="field">
         <label for="slug">Identifiant unique de votre espace *</label>
-        <input type="text" id="slug" placeholder="le-gout-du-lien">
+        <input type="text" id="slug" placeholder="les-bons-petits-plats">
         <div class="hint">Lettres minuscules, chiffres et tirets uniquement. Votre URL : <code id="slugPreview">votre-slug</code>.mybatch.cooking</div>
       </div>
 
