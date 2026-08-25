@@ -105,15 +105,40 @@ exports.handler = async (event) => {
 
       // ---------- Comptes (clientes / salariees) ----------
       case 'create_user': {
-        const { email, password, type, nom, telephone, adresse, notes, nombre_portions } = payload;
+        const { email, password, type, nom, telephone, adresse, notes, nombre_portions, assigne_a_id } = payload;
         if (!email || !password || !type) return json(400, { error: 'email, password, type requis' });
         if (!['client', 'salarie'].includes(type)) return json(400, { error: 'type invalide' });
+        // Cap reseau : on ne depasse pas le nombre de cuisinieres de la formule (blocage serveur, non contournable)
+        if (type === 'salarie') {
+          const entRows = await pg(`entreprises?id=eq.${ENT}&select=formule,reseau_cuisinieres,plan`);
+          const entF = (Array.isArray(entRows) && entRows[0]) ? entRows[0] : {};
+          let cap = { reseau_starter: 3, reseau_pro: 8 }[entF.formule];
+          if (entF.formule === 'reseau_illimite') { const n = parseInt(entF.reseau_cuisinieres, 10); cap = Number.isFinite(n) ? n : null; }
+          if (entF.plan !== 'founder' && cap != null) {
+            const salRows = await pg(`salaries?entreprise_id=eq.${ENT}&select=id`);
+            const nb = Array.isArray(salRows) ? salRows.length : 0;
+            if (nb >= cap) return json(403, { error: `Formule limitée à ${cap} cuisinière(s). Changez de formule pour en ajouter.` });
+          }
+        }
         const u = await createAuthUser({ email, password, type, nom, telephone, adresse, notes });
         await new Promise(r => setTimeout(r, 250)); // laisse le trigger creer la ligne profil
         const table = type === 'client' ? 'clients' : 'salaries';
         const patch = { entreprise_id: ENT };
+        if (nom) patch.nom = nom;
+        if (telephone) patch.telephone = telephone;
+        if (type === 'client') {
+          if (adresse) patch.adresse = adresse;
+          if (notes) patch.notes = notes;
+        }
         if (type === 'client' && nombre_portions != null) patch.nombre_portions = nombre_portions;
-        await rest(`${table}?id=eq.${u.id}`, { method: 'PATCH', headers: minimal, body: JSON.stringify(patch) });
+        if (type === 'client' && assigne_a_id !== undefined) patch.assigne_a_id = assigne_a_id || null; // vide = la tete de reseau
+        // Scope : une cliente ne peut etre attribuee qu'a une cuisiniere de CETTE entreprise
+        if (type === 'client' && assigne_a_id) {
+          const sal = await pg(`salaries?id=eq.${assigne_a_id}&entreprise_id=eq.${ENT}&select=id`);
+          if (!Array.isArray(sal) || !sal.length) return json(400, { error: 'Cuisinière attribuée invalide.' });
+        }
+        // pg() (et non rest()) : si le PATCH echoue, on leve au lieu de renvoyer un faux succes
+        await pg(`${table}?id=eq.${u.id}`, { method: 'PATCH', headers: minimal, body: JSON.stringify(patch) });
         const rows = await pg(`${table}?id=eq.${u.id}&select=*`);
         return json(200, { profile: Array.isArray(rows) ? rows[0] : null });
       }
@@ -139,14 +164,15 @@ exports.handler = async (event) => {
           const rows = await pg(`${table}?id=eq.${id}&entreprise_id=eq.${ENT}&select=id`);
           if (!Array.isArray(rows) || !rows.length) return json(403, { error: 'Cible hors entreprise' });
         }
+        // pg() : chaque suppression est verifiee ; un echec interrompt au lieu de renvoyer ok:true
         if (type === 'client') {
-          await rest(`favoris?client_id=eq.${id}`, { method: 'DELETE', headers: minimal });
-          await rest(`commandes?client_id=eq.${id}`, { method: 'DELETE', headers: minimal });
-          await rest(`clients?id=eq.${id}`, { method: 'DELETE', headers: minimal });
+          await pg(`favoris?client_id=eq.${id}`, { method: 'DELETE', headers: minimal });
+          await pg(`commandes?client_id=eq.${id}`, { method: 'DELETE', headers: minimal });
+          await pg(`clients?id=eq.${id}`, { method: 'DELETE', headers: minimal });
         } else {
-          await rest(`commandes?assigne_a_id=eq.${id}`, { method: 'PATCH', headers: minimal, body: JSON.stringify({ assigne_a_id: null }) });
-          await rest(`clients?assigne_a_id=eq.${id}`, { method: 'PATCH', headers: minimal, body: JSON.stringify({ assigne_a_id: null }) });
-          await rest(`salaries?id=eq.${id}`, { method: 'DELETE', headers: minimal });
+          await pg(`commandes?assigne_a_id=eq.${id}`, { method: 'PATCH', headers: minimal, body: JSON.stringify({ assigne_a_id: null }) });
+          await pg(`clients?assigne_a_id=eq.${id}`, { method: 'PATCH', headers: minimal, body: JSON.stringify({ assigne_a_id: null }) });
+          await pg(`salaries?id=eq.${id}`, { method: 'DELETE', headers: minimal });
         }
         await deleteAuthUser(id);
         return json(200, { ok: true });
@@ -162,12 +188,13 @@ exports.handler = async (event) => {
 
       case 'platform_stats': {
         if (!isFounder) return json(403, { error: 'Founder requis' });
-        const [clients, recettes, commandes] = await Promise.all([
+        const [clients, recettes, commandes, salaries] = await Promise.all([
           pg(`clients?select=entreprise_id`),
           pg(`recettes?select=entreprise_id`),
-          pg(`commandes?select=entreprise_id,montant,semaine_du,statut`)
+          pg(`commandes?select=entreprise_id,montant,semaine_du,statut`),
+          pg(`salaries?select=entreprise_id`)
         ]);
-        return json(200, { clients, recettes, commandes });
+        return json(200, { clients, recettes, commandes, salaries });
       }
 
       case 'save_entreprise': {
@@ -180,7 +207,7 @@ exports.handler = async (event) => {
             const uid = Array.isArray(links) && links[0] ? links[0].user_id : null;
             if (uid) await updateAuthUser(uid, { email, password });
           }
-          await rest(`entreprises?id=eq.${id}`, { method: 'PATCH', headers: minimal, body: JSON.stringify(fields) });
+          await pg(`entreprises?id=eq.${id}`, { method: 'PATCH', headers: minimal, body: JSON.stringify(fields) });
           const rows = await pg(`entreprises?id=eq.${id}&select=*`);
           return json(200, { entreprise: Array.isArray(rows) ? rows[0] : null });
         }
@@ -190,8 +217,8 @@ exports.handler = async (event) => {
         let authUser;
         try { authUser = await createAuthUser({ email, password, type: 'admin', nom: contact }); }
         catch (e) { await rest(`entreprises?id=eq.${ent.id}`, { method: 'DELETE', headers: minimal }); throw new Error('Creation compte auth : ' + e.message); }
-        await rest(`clients?id=eq.${authUser.id}`, { method: 'DELETE', headers: minimal });
-        await rest(`salaries?id=eq.${authUser.id}`, { method: 'DELETE', headers: minimal });
+        await pg(`clients?id=eq.${authUser.id}`, { method: 'DELETE', headers: minimal });
+        await pg(`salaries?id=eq.${authUser.id}`, { method: 'DELETE', headers: minimal });
         try {
           await pg(`admins_entreprise`, { method: 'POST', headers: minimal, body: JSON.stringify({ user_id: authUser.id, entreprise_id: ent.id, nom: contact }) });
         } catch (e) {
@@ -199,18 +226,9 @@ exports.handler = async (event) => {
           await rest(`entreprises?id=eq.${ent.id}`, { method: 'DELETE', headers: minimal });
           throw e;
         }
-        // Starter pack ingredients (non bloquant)
+        // Starter pack : clone le modele "modele-mybatch" (30 recettes + ingredients). Non bloquant.
         try {
-          if (seed_from_slug) {
-            const src = await pg(`entreprises?slug=eq.${seed_from_slug}&select=id`);
-            const srcId = Array.isArray(src) && src[0] ? src[0].id : null;
-            if (srcId) {
-              const ings = await pg(`ingredients?entreprise_id=eq.${srcId}&select=nom,unite_par_defaut,rayon`);
-              if (Array.isArray(ings) && ings.length) {
-                await rest(`ingredients`, { method: 'POST', headers: minimal, body: JSON.stringify(ings.map(i => ({ ...i, entreprise_id: ent.id }))) });
-              }
-            }
-          }
+          await rest(`rpc/seed_entreprise_from_template`, { method: 'POST', headers: minimal, body: JSON.stringify({ p_target: ent.id }) });
         } catch (_) { /* silencieux */ }
         return json(200, { entreprise: ent });
       }
@@ -220,7 +238,7 @@ exports.handler = async (event) => {
         const { id } = payload;
         if (!id) return json(400, { error: 'id requis' });
         const links = await pg(`admins_entreprise?entreprise_id=eq.${id}&select=user_id`);
-        await rest(`entreprises?id=eq.${id}`, { method: 'DELETE', headers: minimal });
+        await pg(`entreprises?id=eq.${id}`, { method: 'DELETE', headers: minimal });
         if (Array.isArray(links)) {
           for (const l of links) { if (l.user_id) await deleteAuthUser(l.user_id).catch(() => {}); }
         }

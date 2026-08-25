@@ -2,17 +2,24 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#FAF6EE">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="my batch">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<script>if('serviceWorker' in navigator){addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){})})}</script>
 <title>my batch — Connexion</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23FAF6EE'/%3E%3Ctext x='3' y='25' font-family='Inter,sans-serif' font-weight='800' font-size='24' fill='%231A1A1A' letter-spacing='-1.5'%3Emb%3C/text%3E%3Ccircle cx='26' cy='22' r='3.2' fill='%23E8843D'/%3E%3C/svg%3E">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 :root{--brand-primary:#E8843D;--brand-secondary:#3D6B4F;--vert:var(--brand-primary);--vc:var(--brand-secondary);--vp:color-mix(in srgb, var(--brand-secondary) 12%, #fff);--bg:#FAF6EE;--bgd:#F0EBE0;--tx:#1A1A1A;--txl:#6b6b6b;--wh:#fff;--sh:0 4px 24px rgba(0,0,0,.08);--r:16px;--ink:#1A1A1A;--orange-dot:#E8843D}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);min-height:100vh}
-header{background:var(--wh);border-bottom:1px solid var(--bgd);padding:0 32px;display:flex;align-items:center;justify-content:space-between;height:68px;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(0,0,0,.04)}
-.logo{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:var(--vert)}
-.hbtns{display:flex;gap:10px;align-items:center}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);min-height:100vh;overflow-x:hidden;overscroll-behavior-y:none}
+header{background:var(--wh);border-bottom:1px solid var(--bgd);padding:0 32px;padding-top:env(safe-area-inset-top);display:flex;align-items:center;justify-content:space-between;gap:12px;height:calc(68px + env(safe-area-inset-top));position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(0,0,0,.04)}
+.logo{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:var(--vert);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hbtns{display:flex;gap:10px;align-items:center;flex-shrink:0}
 .hbtn{padding:8px 16px;background:transparent;border:1.5px solid var(--bgd);border-radius:8px;font-size:13px;color:var(--txl);cursor:pointer;transition:all .2s;font-family:'DM Sans',sans-serif}
 .hbtn:hover{border-color:var(--vert);color:var(--vert)}
 .hbtn.green{background:var(--vert);color:#fff;border-color:var(--vert)}
@@ -92,8 +99,8 @@ header{background:var(--wh);border-bottom:1px solid var(--bgd);padding:0 32px;di
 .pimg{width:100%;height:165px;object-fit:cover;display:block}
 .pph{width:100%;height:165px;background:linear-gradient(135deg,var(--bgd),var(--vp));display:flex;align-items:center;justify-content:center;font-size:40px}
 .pinfo{padding:13px 15px 15px}
-.ptop{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
-.pcat{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.5px}
+.ptop{display:flex;flex-direction:column;align-items:flex-start;gap:7px;margin-bottom:6px}
+.pcat{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
 .cv{background:#e8f5e9;color:#2e7d32}.cm{background:#fdecea;color:#c62828}.cp{background:#e3f2fd;color:#1565c0}.cpp{background:#fce4ec;color:#c2185b}.cd{background:var(--bgd);color:var(--txl)}
 .pnom{font-family:'Playfair Display',serif;font-size:14px;font-weight:600}
 .bing{font-size:11px;color:var(--vert);background:var(--vp);border:none;padding:3px 9px;border-radius:6px;cursor:pointer;font-weight:500;font-family:'DM Sans',sans-serif}
@@ -214,8 +221,11 @@ header{background:var(--wh);border-bottom:1px solid var(--bgd);padding:0 32px;di
 @media(max-width:640px){
   .main{padding:20px 16px 80px}
   header{padding:0 16px;height:58px}
+  .notif-panel{position:fixed;top:66px;right:12px;left:12px;width:auto;max-width:none}
   .logo{font-size:18px}
   .hbtn{padding:6px 12px;font-size:12px}
+  header{padding-left:14px;padding-right:14px}
+  .greet{display:none}
   .dash-grid{grid-template-columns:1fr}
   .dash-card{padding:22px}
   .dash-icon{font-size:28px;margin-bottom:10px}
@@ -263,6 +273,13 @@ header{background:var(--wh);border-bottom:1px solid var(--bgd);padding:0 32px;di
     <div class="fg"><label>Mot de passe</label><input type="password" id="iMdp" placeholder="••••••••" autocomplete="current-password"></div>
     <button class="btnLogin" id="btnLogin">Se connecter</button>
     <div class="lerr" id="lerr"></div>
+    <div style="text-align:center;margin-top:12px"><a href="#" id="forgotLink" style="color:#8a8578;font-size:12.5px;text-decoration:underline">Mot de passe oublié ?</a></div>
+    <div id="forgotBox" style="display:none;margin-top:12px;padding:14px;background:#f8f4ee;border-radius:11px;text-align:left">
+      <label style="display:block;font-size:12px;font-weight:600;margin-bottom:5px">Votre email</label>
+      <input type="email" id="iForgotEmail" placeholder="votre@email.com" autocomplete="email" style="width:100%;padding:11px 12px;border:1.5px solid #EAE3D6;border-radius:10px;font-family:inherit;font-size:14px;margin-bottom:8px;box-sizing:border-box">
+      <button id="btnForgot" class="btnLogin" style="margin-top:0">Envoyer le lien</button>
+      <div id="forgotMsg" style="font-size:12.5px;margin-top:8px;min-height:16px"></div>
+    </div>
     <div class="l-help" style="text-align:center"><strong>Vous êtes batchcookeuse</strong> et pas encore inscrite ? <a href="signup.html" style="color:var(--orange-dot);font-weight:600;text-decoration:underline">Créer mon espace pro →</a></div>
     <div class="l-help" style="text-align:center;margin-top:8px;font-size:11.5px;color:var(--txl)">Vous êtes une <strong>cliente</strong> ? Connectez-vous avec les identifiants donnés par votre batchcookeuse — inutile de créer un compte.</div>
     <div class="l-help" style="margin-top:10px;padding-top:14px;font-size:11.5px;color:var(--txl)">Problème de connexion ? Contactez <strong>contact@mybatch.cooking</strong></div>
@@ -274,7 +291,7 @@ header{background:var(--wh);border-bottom:1px solid var(--bgd);padding:0 32px;di
   <header>
     <div class="logo">Mon espace Batchcooking</div>
     <div class="hbtns">
-      <span style="font-size:14px;color:var(--txl)">Bonjour, <strong id="unom"></strong> 👋</span>
+      <span class="greet" style="font-size:14px;color:var(--txl);white-space:nowrap">Bonjour, <strong id="unom"></strong> 👋</span>
       <div style="position:relative">
         <button class="notif-bell" id="notifBell">🔔<span class="notif-bell-badge" id="notifBellBadge">0</span></button>
         <div class="notif-panel" id="notifPanel"></div>
@@ -342,8 +359,10 @@ header{background:var(--wh);border-bottom:1px solid var(--bgd);padding:0 32px;di
         </div>
       </div>
     </div>
+    <div id="formuleChoix" style="margin-bottom:12px"></div>
     <div class="stit">Les plats de cette semaine</div>
     <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">
+      <div id="platTypeChips" style="display:flex;flex-wrap:wrap;gap:6px"></div>
       <input type="text" id="platSearch" placeholder="🔍 Rechercher un plat..." style="padding:11px 14px;border:1.5px solid var(--bgd);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:14px;outline:none;background:var(--wh);color:var(--tx);width:100%">
       <div id="platCatChips" style="display:flex;flex-wrap:wrap;gap:6px"></div>
     </div>
@@ -396,5 +415,30 @@ header{background:var(--wh);border-bottom:1px solid var(--bgd);padding:0 32px;di
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="app.js"></script>
+<!-- Bannière "Ajouter à l'écran d'accueil" (PWA) -->
+<div id="pwaInstall" style="display:none;position:fixed;left:12px;right:12px;bottom:12px;z-index:9999;background:#1A1A1A;color:#fff;border-radius:14px;padding:13px 14px;box-shadow:0 10px 34px rgba(0,0,0,.28);font-family:'DM Sans','Segoe UI',Arial,sans-serif;font-size:13.5px;align-items:center;gap:11px">
+  <span style="font-size:22px;flex-shrink:0">📲</span>
+  <div style="flex:1;line-height:1.35" id="pwaTxt">Ajoutez <b>my batch</b> à votre écran d'accueil pour la retrouver en 1 clic.</div>
+  <button id="pwaBtn" style="background:#E8843D;color:#fff;border:none;border-radius:10px;padding:9px 13px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0">Installer</button>
+  <button id="pwaClose" aria-label="Fermer" style="background:none;border:none;color:rgba(255,255,255,.55);font-size:22px;cursor:pointer;padding:0 4px;flex-shrink:0;line-height:1">&times;</button>
+</div>
+<script>
+(function(){
+  var bar=document.getElementById('pwaInstall'); if(!bar) return;
+  var btn=document.getElementById('pwaBtn'), txt=document.getElementById('pwaTxt'), close=document.getElementById('pwaClose');
+  var standalone=window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;
+  if(standalone){ return; }
+  try{ if(localStorage.getItem('pwaDismissed')==='1') return; }catch(e){}
+  var deferred=null;
+  function show(){ bar.style.display='flex'; }
+  function dismiss(){ bar.style.display='none'; try{localStorage.setItem('pwaDismissed','1');}catch(e){} }
+  close.addEventListener('click', dismiss);
+  window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); deferred=e; show(); });
+  btn.addEventListener('click', function(){ if(deferred){ deferred.prompt(); deferred.userChoice.then(function(){ dismiss(); deferred=null; }); } });
+  window.addEventListener('appinstalled', dismiss);
+  var isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
+  if(isIOS){ btn.style.display='none'; txt.innerHTML='Astuce : ajoutez <b>my batch</b> à votre écran d\'accueil — appuyez sur <b>Partager</b> puis <b>« Sur l\'écran d\'accueil »</b>.'; setTimeout(show,1600); }
+})();
+</script>
 </body>
 </html>

@@ -187,7 +187,10 @@ function renderEntreprises() {
 
   $('entGrid').innerHTML = list.map(e => {
     const statusBadge = renderStatusBadge(e);
-    const planBadge = `<span class="b ${e.plan === 'founder' ? 'orange' : 'gray'} no-dot">${escapeHtml(e.plan || 'standard')}</span>`;
+    const FORMULE_LBL = { reseau_illimite: '🌐 Réseau Illimité', reseau_pro: '🌐 Réseau Pro', reseau_starter: '🌐 Réseau Starter', premium: '💎 Premium', standard: '📦 Standard' };
+    const planBadge = e.plan === 'founder'
+      ? `<span class="b orange no-dot">👑 Founder</span>`
+      : `<span class="b gray no-dot">${escapeHtml(FORMULE_LBL[e.formule] || FORMULE_LBL.standard)}</span>`;
     const since = e.created_at ? new Date(e.created_at).toLocaleDateString('fr-FR') : '—';
     const onb = e.onboarding || { completed_steps: 0, total_steps: 4, score: 0, has_recettes: false, has_clientes: false, has_commandes: false, has_branding: false };
     return `
@@ -257,6 +260,15 @@ function renderActivity(items) {
 
 // ============= DETAIL MODAL =============
 
+// Guide (formule annuelle) : renonce -> immediat, sinon dispo a J+14
+function guideAccessLabel(e) {
+  if (e.guide_renonce) return '✅ Oui — immédiat (a renoncé à la rétractation)';
+  if (!e.created_at) return '—';
+  const dispo = new Date(new Date(e.created_at).getTime() + 14 * 86400000);
+  if (Date.now() >= dispo.getTime()) return '✅ Oui — depuis J+14';
+  return '⏳ Pas encore — dispo le ' + dispo.toLocaleDateString('fr-FR');
+}
+
 function openDetail(id) {
   const e = DATA_ENT.find(x => x.id === id);
   if (!e) return;
@@ -268,9 +280,15 @@ function openDetail(id) {
     ['ID', e.id, true],
     ['Slug', e.slug, false],
     ['Plan', e.plan, false],
+    ['Formule', e.formule || 'standard', false],
+    ...(e.reseau_cuisinieres != null ? [['Cuisinières facturées', String(e.reseau_cuisinieres), false]] : []),
     ['Cycle', e.cycle, false],
     ['Statut sub', e.subscription_status, false],
     ['Actif', e.active ? 'Oui' : 'Non', false],
+    ...(e.cycle === 'annuel' ? [
+      ['Renoncé rétractation', e.guide_renonce ? '✅ Oui' : '❌ Non', false],
+      ['Guide accessible', guideAccessLabel(e), false]
+    ] : []),
     ['Stripe customer', e.stripe_customer_id, true],
     ['Stripe sub', e.stripe_subscription_id, true],
     ['Trial fin', e.trial_ends_at ? new Date(e.trial_ends_at).toLocaleDateString('fr-FR') : '—', false],
@@ -341,6 +359,7 @@ function openDetail(id) {
   $('dmActReactivate').style.display = e.active === false ? 'inline-flex' : 'none';
   $('dmActSuspend').onclick = () => actSuspend(e.id);
   $('dmActReactivate').onclick = () => actReactivate(e.id);
+  $('dmActDelete').onclick = () => actDelete(e.id, e.nom_marque);
 
   // Autosave notes
   const notesEl = $('entNotes');
@@ -424,6 +443,15 @@ async function actSuspend(id) {
 
 async function actReactivate(id) {
   await callAction('reactivate', { entreprise_id: id });
+}
+
+async function actDelete(id, nom) {
+  const name = nom || 'cette entreprise';
+  if (!confirm(`⚠️ SUPPRESSION DÉFINITIVE\n\n« ${name} » et TOUTES ses données (clientes, recettes, commandes, comptes de connexion) seront effacées.\n\nCette action est IRRÉVERSIBLE. Continuer ?`)) return;
+  const typed = prompt(`Pour confirmer, tape le nom exactement :\n\n${name}`);
+  if (typed == null) return;
+  if (typed.trim() !== String(name).trim()) { toast('Nom incorrect — suppression annulée', 'error'); return; }
+  await callAction('delete', { entreprise_id: id });
 }
 
 async function actExtendTrial(id) {

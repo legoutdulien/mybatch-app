@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Notice Réseau — my batch</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23FAF6EE'/%3E%3Ctext x='3' y='25' font-family='Inter,sans-serif' font-weight='800' font-size='24' fill='%231A1A1A' letter-spacing='-1.5'%3Emb%3C/text%3E%3Ccircle cx='26' cy='22' r='3.2' fill='%23E8843D'/%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  :root{--green:#3D6B4F;--green-3:#264935;--green-pale:#EEF4F0;--orange:#E8843D;--orange-2:#C26821;--orange-pale:#FBE9D5;--ink:#1A1A1A;--tx:#3a3a34;--muted:#8a8578;--cream:#FAF6EE;--line:#EAE3D6}
+  @page{size:A4;margin:16mm 15mm 14mm}
+  html,body{font-family:'Inter',sans-serif;color:var(--tx);line-height:1.55;background:var(--cream)}
+  .sheet{max-width:820px;margin:0 auto;background:#fff;padding:34px 30px;min-height:100vh}
+  @media(min-width:900px){.sheet{margin:28px auto;min-height:0;border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,.06)}}
+  body{font-size:14.5px}
+  header.doc{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid var(--green);padding-bottom:14px;margin-bottom:24px;flex-wrap:wrap;gap:8px}
+  .logo{font-size:28px;font-weight:800;letter-spacing:-.03em;color:var(--ink)}
+  .logo .dot{color:var(--orange)}
+  .badge-r{background:var(--green);color:#fff;font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;padding:4px 11px;border-radius:999px;align-self:center}
+  .doc-title{font-family:'Playfair Display',serif;font-size:22px;color:var(--green-3);font-weight:700}
+  .intro{background:var(--green-pale);border-radius:12px;padding:16px 20px;margin-bottom:24px;color:var(--green-3)}
+  .intro b{color:var(--green-3)}
+  h2{font-family:'Playfair Display',serif;font-size:19px;color:var(--ink);margin:24px 0 11px;padding-top:10px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px;break-after:avoid}
+  h2 .sub{font-size:13px;color:var(--muted);font-weight:400;font-family:'Inter',sans-serif}
+  h2 .n{background:var(--orange);color:#fff;width:28px;height:28px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-family:'Inter',sans-serif;font-weight:800;font-size:14px;flex-shrink:0}
+  h2.res .n{background:var(--green)}
+  section{break-inside:avoid}
+  p{margin-bottom:8px}
+  ul{list-style:none;margin:6px 0 12px}
+  li{position:relative;padding-left:20px;margin-bottom:6px}
+  li::before{content:"›";position:absolute;left:2px;color:var(--orange);font-weight:800}
+  b,strong{color:var(--ink)}
+  .tag{display:inline-block;background:var(--orange-pale);color:var(--orange-2);border-radius:5px;padding:1px 7px;font-weight:600;font-size:12.5px}
+  .tip{background:var(--cream);border-left:3px solid var(--orange);border-radius:0 8px 8px 0;padding:11px 15px;margin:10px 0 14px;font-size:13.5px}
+  .tip b{color:var(--orange-2)}
+  .key{background:var(--green-pale);border-left:3px solid var(--green);border-radius:0 8px 8px 0;padding:11px 15px;margin:10px 0 14px;font-size:13.5px;color:var(--green-3)}
+  .key b{color:var(--green-3)}
+  .foot{margin-top:28px;border-top:1px solid var(--line);padding-top:14px;font-size:12.5px;color:var(--muted);text-align:center}
+  a{color:var(--orange-2);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<header class="doc">
+  <div class="logo">my batch<span class="dot">.</span></div>
+  <span class="badge-r">Réseau</span>
+  <div class="doc-title">Guide de la tête de réseau</div>
+</header>
+
+<div class="intro">
+  Bienvenue dans <b>my batch Réseau</b> ! 🎉 Vous pilotez plusieurs cuisinières sous <b>votre marque</b> : chacune a son espace, vous supervisez l'ensemble. Ce guide couvre <b>tout</b> — la prise en main de votre espace <b>et</b> les fonctions réseau. Les sections marquées <span class="badge-r" style="font-size:10px">Réseau</span> sont spécifiques à votre offre.
+</div>
+
+<section>
+<h2 class="res"><span class="n">1</span> Le principe du réseau <span class="sub">· qui fait quoi</span></h2>
+<ul>
+  <li><b>Vous (la tête de réseau)</b> : vous créez les cuisinières, attribuez les clientes, validez les recettes et pilotez l'activité globale. <b>Seule vous êtes facturée.</b></li>
+  <li><b>Vos cuisinières</b> : chacune a son <b>login</b> et son <b>espace</b> (à votre marque). Elle gère ses créneaux, propose ses recettes, saisit ses forfaits et son paiement, voit ses missions et les confirme. <b>Elles ne paient rien.</b></li>
+  <li><b>Vos clientes</b> : même parcours qu'ailleurs (un créneau + une formule à composer selon le forfait choisi), en voyant l'offre de <b>leur</b> cuisinière attribuée.</li>
+</ul>
+<div class="key"><b>À retenir :</b> « attribué à Moi » = c'est <b>vous</b> qui gérez (vous êtes aussi cuisinière). « attribué à une cuisinière » = c'est elle.</div>
+</section>
+
+<section>
+<h2><span class="n">2</span> Personnaliser mon espace <span class="sub">· onglet ⚙️ Paramètres</span></h2>
+<ul>
+  <li><b>Nom de marque</b> + <b>logo</b> + <b>couleurs</b> : ils s'appliquent à votre espace, à ceux de <b>vos cuisinières</b> et de <b>vos clientes</b>.</li>
+  <li><b>Montant client par défaut</b> et <b>email / mot de passe</b> de connexion, modifiables ici à tout moment.</li>
+  <li><b>🔥 Max de plats au four par commande</b> : limite les plats nécessitant le four dans une même commande. Vide = aucune limite.</li>
+  <li><b>💶 Afficher le crédit d'impôt (−50%)</b> : la cliente voit « Prestation X€ » puis « À votre charge ≈ X/2 € après crédit d'impôt ». Le montant enregistré reste le prix plein.</li>
+</ul>
+</section>
+
+<section>
+<h2><span class="n">3</span> Mes forfaits <span class="sub">· Paramètres → Mes forfaits</span></h2>
+<p>Vos offres (ex. « Semaine », « Semaine + courses »). La cliente en choisit une au moment de commander, et le prix en découle.</p>
+<ul>
+  <li>Nom, prix, description, badge. Option <b>« inclut les courses »</b> : la cliente ne voit pas la liste de courses (c'est vous/la cuisinière qui shoppez).</li>
+  <li><b>Composition de la formule</b> : combien de plats de chaque <b>type</b> — <b>entrées 🥗</b>, <b>plats 🍽️</b>, <b>desserts 🍰</b>, <b>petits plus ➕</b>. Ex. « 1 entrée + 1 plat + 1 dessert », ou « 5 plats » tout simplement. La cliente compose sa commande exactement selon ce que vous (ou la cuisinière) avez défini.</li>
+  <li>Si le <b>crédit d'impôt</b> est activé (Paramètres), le prix affiché à la cliente montre le <b>reste à charge après crédit d'impôt (≈ 50%)</b>.</li>
+</ul>
+<div class="tip"><b>Astuce :</b> sans forfait, pas de commande possible. Chaque cuisinière peut aussi définir <b>ses propres forfaits</b> depuis son espace.</div>
+</section>
+
+<section>
+<h2><span class="n">4</span> Mes recettes & ingrédients <span class="sub">· onglets 🍽️ Recettes / 🥕 Ingrédients</span></h2>
+<ul>
+  <li>Vous démarrez avec <b>30 recettes</b> et <b>120 ingrédients</b> prêts.</li>
+  <li><b>+ Nouvelle recette</b> : photo, <b>type</b> (entrée 🥗 / plat 🍽️ / dessert 🍰 / petit plus ➕), ingrédients & quantités, instructions, conservation, catégories (Sans porc, Sans gluten, Sans lactose, Sucré, Tartes, Cakes…), et la case <b>🔥 « va au four »</b> (compte dans la limite définie en Paramètres). <b>+ Nouvel ingrédient</b> pour enrichir la base.</li>
+  <li><b>Unité par recette</b> : l'unité de chaque ingrédient se règle <b>recette par recette</b> — la modifier dans une recette ne touche <b>que celle-ci</b>. <b>Quantités fixes</b> (case de la recette) : cochez-la pour les recettes dont la quantité ne dépend pas des portions (<b>gâteaux, tartes, cakes</b>) ; sinon les quantités sont multipliées par le nombre de portions.</li>
+  <li>Le <b>type</b> d'une recette détermine dans quelle « case » de la formule elle entre (une formule « 1 dessert » propose les recettes de type <b>dessert</b>). Sans type précisé = <b>plat</b>.</li>
+  <li><b>Statut</b> : <span class="tag">✓ Actif</span> <span class="tag">⏳ À venir</span> <span class="tag">✗ Inactif</span>. Seules les <b>Actives</b> sont commandables.</li>
+</ul>
+</section>
+
+<section>
+<h2><span class="n">5</span> Mes créneaux <span class="sub">· onglet 🕐 Créneaux</span></h2>
+<ul>
+  <li>Définissez vos <b>créneaux récurrents</b> (jour + horaire), puis <b>ouvrez/fermez</b> par semaine. Un créneau fermé n'apparaît pas côté cliente.</li>
+  <li>Chaque cuisinière définit <b>ses propres créneaux</b> de la même façon depuis son espace.</li>
+</ul>
+</section>
+
+<section>
+<h2 class="res"><span class="n">6</span> Ajouter mes cuisinières <span class="sub">· onglet 🤝 Partenaires</span></h2>
+<ul>
+  <li><b>+ Nouveau partenaire</b> : nom, email, <b>mot de passe</b>. Communiquez-lui son email + ce mot de passe : elle se connecte sur <b>app.mybatch.cooking</b> et arrive sur son espace cuisinière.</li>
+  <li>Modifiable / supprimable à tout moment (ses commandes sont alors désassignées).</li>
+</ul>
+</section>
+
+<section>
+<h2 class="res"><span class="n">7</span> Ajouter & attribuer mes clientes <span class="sub">· onglet 👥 Clients</span></h2>
+<ul>
+  <li><b>+ Nouveau client</b> : nom, email, téléphone, adresse, portions, et <b>mot de passe portail</b> (à lui communiquer avec son email — connexion sur <b>app.mybatch.cooking</b>).</li>
+  <li><b>« Attribuée à »</b> : Moi, ou l'une de vos cuisinières. <b>Routage automatique :</b> ses commandes partent directement à sa cuisinière.</li>
+  <li>La cliente voit automatiquement les <b>créneaux, forfaits et infos de paiement</b> de sa cuisinière. Attribution modifiable à tout moment.</li>
+</ul>
+</section>
+
+<section>
+<h2 class="res"><span class="n">8</span> Valider les recettes proposées <span class="sub">· onglet 🍽️ Recettes</span></h2>
+<ul>
+  <li>Vos cuisinières <b>proposent des recettes complètes</b> (photo + ingrédients) depuis leur espace → statut <span class="tag">⏳ À valider</span> (une bannière vous prévient).</li>
+  <li><b>✅ Valider</b> : publiée, commandable par les clientes. <b>✕ Refuser</b> : <b>supprimée définitivement</b>.</li>
+</ul>
+</section>
+
+<section>
+<h2><span class="n">9</span> Le planning : gérer les commandes <span class="sub">· onglet 📅 Planning</span></h2>
+<ul>
+  <li>Vue <b>Liste hebdo</b> ou <b>Calendrier mensuel</b>. Chaque commande : cliente, créneau, plats, adresse, téléphone.</li>
+  <li><b>Statut</b> : cliquez le badge pour passer à <span class="tag">✓ Confirmée</span> (la cliente reçoit une notif 🔔 et la commande compte dans le CA).</li>
+  <li><span class="badge-r" style="font-size:10px">Réseau</span> <b>Filtre</b> en haut : <b>Tout le réseau / Mes commandes / [chaque cuisinière]</b>.</li>
+  <li><b>🛒</b> liste de courses · <b>✏️</b> modifier · <b>↩️ Répondre</b> aux messages des clientes.</li>
+</ul>
+</section>
+
+<section>
+<h2 class="res"><span class="n">10</span> Piloter mon réseau <span class="sub">· 📊 Stats · 🤝 Partenaires</span></h2>
+<ul>
+  <li><b>Stats</b> : votre CA, « à facturer » et commandes de la semaine = <b>votre</b> activité. <b>Top partenaires</b> = vos cuisinières les plus actives ; <b>Top plats</b> = tout le réseau ; <b>Top clientes</b> = vos clientes.</li>
+  <li><b>Partenaires</b> : pour chaque cuisinière, clientes / commandes / CA du mois, plus votre propre ligne.</li>
+  <li><span class="badge-r" style="font-size:10px">Réseau</span> <b>🧾 Récap mensuel par cuisinière</b> (Stats) : le nombre de commandes de chaque cuisinière pour le mois choisi — pratique pour vos déclarations (multipliez par la durée d'une prestation pour obtenir les heures).</li>
+</ul>
+</section>
+
+<section>
+<h2 class="res"><span class="n">11</span> Ce que fait chaque cuisinière <span class="sub">· son espace</span></h2>
+<p>Depuis son portail (en onglets, à votre marque), votre cuisinière gère elle-même :</p>
+<ul>
+  <li><b>📋 Planning</b> : ses missions, avec le détail (cliente, plats, ingrédients) et un bouton <b>✓ Confirmer</b>.</li>
+  <li><b>📸 Photos des plats préparés</b> : sur chaque mission, la cuisinière peut ajouter des <b>photos des plats préparés</b>. Vous les retrouvez sur la commande, dans votre planning (conservées environ <b>14 jours</b>, puis supprimées automatiquement).</li>
+  <li><b>🕐 Créneaux</b> · <b>🍽️ Recettes</b> (→ votre validation) · <b>📦 Forfaits</b> · <b>💳 Paiement</b> (ses modalités, vues par ses clientes).</li>
+</ul>
+</section>
+
+<section>
+<h2><span class="n">12</span> Le portail de mes clientes</h2>
+<ul>
+  <li>Elles se connectent sur <b>app.mybatch.cooking</b> avec les identifiants que vous leur donnez — <b>rien à installer</b>.</li>
+  <li>Elles passent commande (un créneau + une formule à composer selon le forfait : le bon nombre de plats de chaque type, l'app les guide), laissent un message, suivent leurs commandes, leur liste de courses et vos notifications 🔔.</li>
+  <li>Un badge <b>🔥 Four</b> apparaît sur les plats qui vont au four (avec alerte si le max est dépassé), et le récap affiche le <b>reste à charge après crédit d'impôt</b> si l'option est activée.</li>
+</ul>
+</section>
+
+<section>
+<h2><span class="n">13</span> Abonnement, installation & aide</h2>
+<ul>
+  <li><b>Gérer mon abonnement</b> (Paramètres) : facture, carte, résiliation via l'espace Stripe sécurisé.</li>
+  <li><b>Installer l'app</b> : ouvrez app.mybatch.cooking → menu du navigateur → <b>« Ajouter à l'écran d'accueil »</b>. Vous, vos cuisinières et vos clientes avez chacun une vraie app en plein écran.</li>
+</ul>
+</section>
+
+<div class="foot">
+  my batch Réseau · Guide de la tête de réseau · Besoin d'aide ? <a href="mailto:contact@mybatch.cooking">contact@mybatch.cooking</a> · mybatch.cooking
+</div>
+
+</div>
+</body>
+</html>

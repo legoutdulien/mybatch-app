@@ -6,6 +6,41 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// Traduit n'importe quelle erreur technique en message clair (jamais de SQL brut)
+function msgErr(e) {
+  const m = String((e && (e.message || (e.error && e.error.message))) || e || '');
+  const c = e && (e.code || (e.error && e.error.code));
+  if (c === '23505' || /duplicate key|unique constraint|existe déjà/i.test(m)) return 'Ça existe déjà.';
+  if (c === '23503' || /foreign key|violates foreign/i.test(m)) return 'Impossible : cet élément est encore utilisé ailleurs.';
+  if (/row-level security|not authorized|permission denied|jwt|invalid token|\b401\b|\b403\b|session/i.test(m)) return 'Action refusée (session expirée ?). Reconnecte-toi et réessaie.';
+  if (/failed to fetch|networkerror|network error|load failed|timeout|net::/i.test(m)) return 'Problème de connexion. Vérifie ta connexion et réessaie.';
+  return "L'action n'a pas pu être effectuée. Recharge la page et réessaie.";
+}
+
+// Une écriture Supabase qui viole la RLS ou tombe sur une session expirée renvoie
+// 0 ligne SANS erreur : l'app croit avoir enregistré alors que rien n'est écrit.
+// writeVerified exige un .select() en fin de requête : si 0 ligne, il rafraîchit la
+// session et réessaie 1x, sinon il lève une vraie erreur visible (plus de perte muette).
+async function writeVerified(runQuery) {
+  let res = await runQuery();
+  if (!res.error && (!res.data || res.data.length === 0)) {
+    try { await sb.auth.refreshSession(); } catch (_) {}
+    res = await runQuery();
+  }
+  if (res.error) throw res.error;
+  if (!res.data || res.data.length === 0) throw new Error('Action non prise en compte (session expirée ?). Reconnecte-toi et réessaie.');
+  return res.data;
+}
+
+// Unité effective d'un lien recette-ingrédient : celle propre à la recette (ri.unite)
+// si renseignée, sinon l'unité par défaut de l'ingrédient.
+function riUnite(ri, ing) {
+  const l = ri && ri.unite;
+  if (l != null && l !== '' && l !== 'Unité par défaut') return l;
+  const d = ing && ing.unite_par_defaut;
+  return (d && d !== 'Unité par défaut') ? d : '';
+}
+
 const JOURS_ORDER = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
 const JMAP_FULL = { Lundi: 0, Mardi: 1, Mercredi: 2, Jeudi: 3, Vendredi: 4, Samedi: 5, Dimanche: 6 };
 let creneauxTemplate = [];
@@ -37,6 +72,7 @@ let currentDetailPortions = 4;
 let favoris = new Set();
 let forfaits = [];
 let forfaitSel = null;
+let assignedSalarie = null; // reseau : la cuisiniere attribuee a la cliente (pour forfaits + paiement)
 
 async function loadFavoris() {
   if (!clientProfile) return;
@@ -51,14 +87,15 @@ async function loadFavoris() {
 async function toggleFavori(recetteId, btn) {
   if (!clientProfile) return;
   if (favoris.has(recetteId)) {
-    const { error } = await sb.from('favoris').delete().eq('client_id', clientProfile.id).eq('recette_id', recetteId);
-    if (error) { showToast('Erreur: ' + error.message, 'err'); return; }
+    try {
+      await writeVerified(() => sb.from('favoris').delete().eq('client_id', clientProfile.id).eq('recette_id', recetteId).select('recette_id'));
+    } catch (error) { showToast('⚠️ ' + msgErr(error), 'err'); return; }
     favoris.delete(recetteId);
     btn.textContent = '♡';
     btn.classList.remove('on');
   } else {
     const { error } = await sb.from('favoris').insert({ client_id: clientProfile.id, recette_id: recetteId });
-    if (error) { showToast('Erreur: ' + error.message, 'err'); return; }
+    if (error) { showToast('⚠️ ' + msgErr(error), 'err'); return; }
     favoris.add(recetteId);
     btn.textContent = '♥';
     btn.classList.add('on');
@@ -158,7 +195,7 @@ async function login() {
       return;
     }
     if (r.role === 'salarie') {
-      window.location.href = 'salarie.html';
+      window.location.href = 'partenaire.html';
       return;
     }
     if (r.role === 'client') {
@@ -174,7 +211,7 @@ async function login() {
     await sb.auth.signOut();
     throw new Error("Ce compte n'est rattache a aucune entreprise.");
   } catch (e) {
-    err.textContent = e.message || String(e); err.style.display = 'block';
+    err.textContent = msgErr(e); err.style.display = 'block';
   } finally {
     hideLoad();
   }
@@ -196,18 +233,36 @@ async function loadDash() {
   const dateEl = $('welcomeDate');
   if (dateEl) dateEl.textContent = today;
   showPage('pDash');
-  await Promise.all([loadFavoris(), loadNotifs(), loadForfaits()]);
+  await Promise.all([loadFavoris(), loadNotifs(), loadForfaits(), loadAssignedSalarie()]);
   await chargerMesCommandes();
   setupRealtimeNotifs();
 }
 
 async function loadForfaits() {
   try {
-    const { data } = await sb.from('forfaits').select('*').eq('active', true).order('ordre', { ascending: true });
+    // Reseau : la cliente ne voit que les forfaits de SA cuisiniere. Vide = la tete de reseau.
+    let q = sb.from('forfaits').select('*').eq('active', true);
+    q = clientProfile?.assigne_a_id ? q.eq('salarie_id', clientProfile.assigne_a_id) : q.is('salarie_id', null);
+    let { data, error } = await q.order('ordre', { ascending: true });
+    if (error) {
+      // Colonne salarie_id pas encore migree : fallback = tous les forfaits actifs (compat solo avant migration)
+      const r = await sb.from('forfaits').select('*').eq('active', true).order('ordre', { ascending: true });
+      data = r.data;
+    }
     forfaits = data || [];
   } catch (e) {
     forfaits = [];
   }
+}
+
+// Reseau : charge la cuisiniere attribuee (pour afficher SES modalites de paiement au recap)
+async function loadAssignedSalarie() {
+  assignedSalarie = null;
+  if (!clientProfile?.assigne_a_id) return;
+  try {
+    const { data } = await sb.from('salaries').select('nom, telephone, instructions_paiement').eq('id', clientProfile.assigne_a_id).maybeSingle();
+    assignedSalarie = data || null;
+  } catch (e) { assignedSalarie = null; }
 }
 
 let realtimeChannel = null;
@@ -305,7 +360,7 @@ async function chargerMesCommandes() {
       return;
     }
     div.innerHTML = `<div class="section-titre">Mes commandes (${mesCommandes.length})</div><div class="cmd-liste">${mesCommandes.map((cmd, i) => {
-      const platIds = [cmd.plat_1_id, cmd.plat_2_id, cmd.plat_3_id, cmd.plat_4_id, cmd.plat_5_id].filter(Boolean);
+      const platIds = cmdPlatIds(cmd);
       const plats = platIds.map(id => (recettes.find(r => r.id === id) || {}).nom_du_plat).filter(Boolean);
       const ok = cmd.statut === 'Confirmée';
       return `<div class="cmd-item" data-idx="${i}">
@@ -324,7 +379,7 @@ async function chargerMesCommandes() {
       el.addEventListener('click', () => ouvrirCommande(parseInt(el.dataset.idx, 10)));
     });
   } catch (e) {
-    div.innerHTML = '<p style="color:var(--txl);padding:20px">Erreur chargement: ' + escapeHtml(e.message) + '</p>';
+    div.innerHTML = '<p style="color:var(--txl);padding:20px">⚠️ ' + escapeHtml(msgErr(e)) + '</p>';
   }
 }
 
@@ -343,7 +398,7 @@ async function ouvrirCommande(idx) {
   showLoad('Chargement...');
   try {
     if (!recettes.length) await loadRecettesData();
-    const platIds = [cmd.plat_1_id, cmd.plat_2_id, cmd.plat_3_id, cmd.plat_4_id, cmd.plat_5_id].filter(Boolean);
+    const platIds = cmdPlatIds(cmd);
     platsDetailCache = platIds.map(id => recettes.find(r => r.id === id)).filter(Boolean);
     const semLabel = cmd.semaine_du ? 'Semaine du ' + fmtDate(cmd.semaine_du) : '';
     // Detecte si la cliente a choisi un forfait avec courses incluses
@@ -351,7 +406,7 @@ async function ouvrirCommande(idx) {
     const forfaitInclutCourses = !!f?.inclut_courses;
     renderDetail({ nom: clientProfile.nom || '', semLabel, creneau: cmd.creneau || '', id: cmd.id, statut: cmd.statut || 'En attente de paiement', montant: cmd.montant ?? CURRENT_BRANDING?.montant_client_default ?? 60, forfaitInclutCourses });
   } catch (e) {
-    showToast('Erreur: ' + e.message, 'err');
+    showToast('⚠️ ' + msgErr(e), 'err');
   } finally {
     hideLoad();
   }
@@ -446,16 +501,21 @@ function buildCoursesData(platIds, portions) {
   const p = portions || currentDetailPortions || 4;
   const rayons = {};
   platIds.forEach(pid => {
+    const _recF = recettes.find(r => r.id === pid);
+    const _mult = (_recF && _recF.quantite_fixe) ? 1 : p; // recette à quantités fixes : pas de multiplication par les portions
     const ris = recettesIngredients.filter(ri => ri.recette_id === pid);
     ris.forEach(ri => {
       const ing = ingredients.find(i => i.id === ri.ingredient_id);
       if (!ing) return;
       const ray = ing.rayon || 'Autres';
-      const u = ing.unite_par_defaut && ing.unite_par_defaut !== 'Unité par défaut' ? ing.unite_par_defaut : '';
-      const qte = (ri.quantite_par_portion || 0) * p;
+      const u = riUnite(ri, ing);
+      const qte = (ri.quantite_par_portion || 0) * _mult;
       if (!rayons[ray]) rayons[ray] = {};
-      if (!rayons[ray][ing.nom]) rayons[ray][ing.nom] = { qte: 0, u };
-      rayons[ray][ing.nom].qte += qte;
+      // Meme ingredient dans deux unites differentes (unite par recette) -> lignes separees
+      let key = ing.nom;
+      if (rayons[ray][key] && rayons[ray][key].u !== u) key = ing.nom + ' (' + u + ')';
+      if (!rayons[ray][key]) rayons[ray][key] = { qte: 0, u };
+      rayons[ray][key].qte += qte;
     });
   });
   return Object.entries(rayons).sort((a, b) => a[0].localeCompare(b[0]));
@@ -466,9 +526,13 @@ function loadCourses(platIds) {
   const el = $('coursesDiv');
   if (!sorted.length) { el.innerHTML = '<p style="color:var(--txl);padding:20px">Aucun ingredient trouve.</p>'; return; }
 
-  // Cle de stockage local pour les cochages : par commande
+  // Cases cochees : memorisees par commande. localStorage (instantane, par appareil)
+  // + synchro serveur (table courses_cochees) pour PARTAGER entre appareils d'un meme
+  // compte (ex. mari + femme sur 2 telephones) et conserver 10 jours.
   const storageKey = `courses-${currentCmdId || 'na'}`;
-  const checkedSet = new Set(JSON.parse(localStorage.getItem(storageKey) || '[]'));
+  const cmdId = currentCmdId;
+  let current = new Set(JSON.parse(localStorage.getItem(storageKey) || '[]'));
+  let userTouched = false;
 
   el.innerHTML = sorted.map(([ray, ings]) => {
     const color = RAYON_COLOR[ray] || (CURRENT_BRANDING?.couleur_principale || '#3d6b4f');
@@ -484,7 +548,7 @@ function loadCourses(platIds) {
       </div>
       ${items.map(([n, { qte, u }]) => {
         const key = `${ray}::${n}`;
-        const checked = checkedSet.has(key);
+        const checked = current.has(key);
         return `
         <label class="course-line" data-key="${escapeAttr(key)}" style="display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--bgd);cursor:pointer;user-select:none;${checked ? 'opacity:.45' : ''}">
           <input type="checkbox" class="course-ck" ${checked ? 'checked' : ''} style="width:18px;height:18px;accent-color:${color};cursor:pointer;flex-shrink:0">
@@ -498,24 +562,57 @@ function loadCourses(platIds) {
   // Retire la bordure du dernier item de chaque carte
   el.querySelectorAll('label.course-line:last-child').forEach(l => l.style.borderBottom = 'none');
 
-  // Cochage avec persistance localStorage
+  function saveChecked() {
+    localStorage.setItem(storageKey, JSON.stringify([...current]));
+    // synchro serveur (fire-and-forget) : partage entre appareils + conservation 10 jours
+    if (cmdId) sb.from('courses_cochees').upsert({ commande_id: cmdId, coche: [...current] }, { onConflict: 'commande_id' }).then(() => {}, () => {});
+  }
+  function applyToUI() {
+    el.querySelectorAll('label.course-line').forEach(label => {
+      const ck = label.querySelector('.course-ck');
+      const on = current.has(label.dataset.key);
+      ck.checked = on;
+      label.style.opacity = on ? '.45' : '1';
+      const txt = label.querySelector('span:nth-child(2)');
+      if (txt) txt.style.textDecoration = on ? 'line-through' : 'none';
+    });
+  }
+
+  // Cochage
   el.querySelectorAll('label.course-line').forEach(label => {
     const ck = label.querySelector('.course-ck');
     label.addEventListener('click', (e) => {
       // Eviter double-click si clic direct sur la checkbox (laisser le comportement natif)
-      if (e.target !== ck) {
-        e.preventDefault();
-        ck.checked = !ck.checked;
-      }
+      if (e.target !== ck) { e.preventDefault(); ck.checked = !ck.checked; }
+      userTouched = true;
       const key = label.dataset.key;
-      const cur = new Set(JSON.parse(localStorage.getItem(storageKey) || '[]'));
-      if (ck.checked) cur.add(key); else cur.delete(key);
-      localStorage.setItem(storageKey, JSON.stringify([...cur]));
+      if (ck.checked) current.add(key); else current.delete(key);
       label.style.opacity = ck.checked ? '.45' : '1';
       const txt = label.querySelector('span:nth-child(2)');
       if (txt) txt.style.textDecoration = ck.checked ? 'line-through' : 'none';
+      saveChecked();
     });
   });
+
+  // Charge l'etat serveur (partage entre appareils du meme compte). Si l'utilisateur
+  // n'a pas encore touche aux cases, on applique l'etat serveur (< 10 jours). Sinon on
+  // remonte les cases locales existantes au serveur (migration / premiere fois).
+  if (cmdId) {
+    (async () => {
+      try {
+        const { data } = await sb.from('courses_cochees').select('coche, updated_at').eq('commande_id', cmdId).maybeSingle();
+        if (userTouched) return;
+        const fresh = data && data.updated_at && (Date.now() - new Date(data.updated_at).getTime()) < 10 * 24 * 3600 * 1000;
+        if (fresh && Array.isArray(data.coche)) {
+          current = new Set(data.coche);
+          localStorage.setItem(storageKey, JSON.stringify([...current]));
+          applyToUI();
+        } else if (!data && current.size) {
+          saveChecked();
+        }
+      } catch (_) {}
+    })();
+  }
 }
 
 function voirIngDetail(platId) {
@@ -532,8 +629,8 @@ function voirIngDetail(platId) {
       <ul class="ings">${ris.map(ri => {
         const ing = ingredients.find(i => i.id === ri.ingredient_id);
         if (!ing) return '';
-        const qte = (ri.quantite_par_portion || 0) * portions;
-        const u = ing.unite_par_defaut && ing.unite_par_defaut !== 'Unité par défaut' ? ing.unite_par_defaut : '';
+        const qte = (ri.quantite_par_portion || 0) * (plat.quantite_fixe ? 1 : portions);
+        const u = riUnite(ri, ing);
         return `<li style="display:flex;justify-content:space-between"><span>${escapeHtml(ing.nom)}</span><span style="color:var(--txl)">${qte > 0 ? fmtN(qte) + (u ? ' ' + u : '') : '–'}</span></li>`;
       }).join('')}</ul>` : ''}
       <div class="mstit">♨️ Rechauffage</div>
@@ -628,7 +725,7 @@ function renderAVenirGrid() {
       ${rec.photo_url ? `<img class="pimg" src="${escapeHtml(rec.photo_url)}" alt="${escapeHtml(rec.nom_du_plat)}" loading="lazy">` : `<div class="pph">🍽️</div>`}
       <div class="pinfo">
         <div class="ptop">
-          <span style="display:inline-flex;flex-wrap:wrap;gap:4px">${(catsOf(rec).length ? catsOf(rec) : ['Plat']).map(c => `<span class="pcat ${catCls(c)}">${escapeHtml(c)}</span>`).join('')}</span>
+          <span style="display:flex;flex-wrap:wrap;gap:4px;width:100%">${(catsOf(rec).length ? catsOf(rec) : ['Plat']).map(c => `<span class="pcat ${catCls(c)}">${escapeHtml(c)}</span>`).join('')}${rec.au_four ? `<span class="pcat" style="background:#ffe8d6;color:#c1440e">🔥 Four</span>` : ''}</span>
         </div>
         <div class="pnom">${escapeHtml(rec.nom_du_plat)}</div>
         <div style="font-size:11px;font-style:italic;color:var(--txl);margin-top:6px">Disponible prochainement</div>
@@ -640,11 +737,59 @@ function renderAVenirGrid() {
 async function showApp() {
   sel = []; semSel = null; crenSel = null;
   currentDetailPortions = clientProfile?.nombre_portions || 4;
+  // Formule par defaut : la 1ere (ou la moins chere) ; elle definit les quotas par type
+  if (!forfaitSel || !forfaits.find(f => f.id === forfaitSel.id)) forfaitSel = forfaits[0] || null;
+  platTypeFilter = (activeTypes()[0] || { key: 'plat' }).key;
   showPage('pApp');
   affSemaines();
   if (!recettes.length) await loadRecettesData();
+  renderFormuleChoix();
   renderPlats();
   majBarre();
+}
+
+// Selecteur de formule (avant de composer). 1 seul forfait -> affichage compact ; plusieurs -> choix.
+function renderFormuleChoix() {
+  const c = $('formuleChoix');
+  if (!c) return;
+  if (!forfaits.length) { c.innerHTML = ''; return; } // pas de forfait -> 5 plats classiques, rien a choisir
+  const card = (f) => {
+    const on = f.id === forfaitSel?.id;
+    const q = forfaitQuotas(f);
+    const compo = PLAT_TYPES.filter(t => q[t.key] > 0).map(t => `${q[t.key]} ${t.emoji}`).join(' + ');
+    return `<label style="display:flex;align-items:center;gap:10px;padding:11px 13px;border:2px solid ${on ? 'var(--vert)' : 'var(--bgd)'};border-radius:11px;cursor:pointer;background:${on ? 'var(--vp)' : 'var(--wh)'}">
+      <input type="radio" name="formuleRadio" value="${f.id}" ${on ? 'checked' : ''} style="flex-shrink:0">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:14px">${escapeHtml(f.nom)}${f.badge ? ` <span style="background:var(--vp);color:var(--vert);font-size:10px;padding:1px 7px;border-radius:8px">${escapeHtml(f.badge)}</span>` : ''}</div>
+        <div style="font-size:11px;color:#6b6b6b">${escapeHtml(compo)}</div>
+      </div>
+      <span style="font-weight:700;color:var(--vert);white-space:nowrap">${f.prix}€</span>
+    </label>`;
+  };
+  c.innerHTML = `<div class="ctit">📦 Votre formule</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px">${forfaits.map(card).join('')}</div>`;
+  c.querySelectorAll('input[name="formuleRadio"]').forEach(r => {
+    r.addEventListener('change', () => {
+      forfaitSel = forfaits.find(f => f.id === r.value) || null;
+      sel = []; // on repart a zero : les quotas changent
+      platTypeFilter = (activeTypes()[0] || { key: 'plat' }).key;
+      renderFormuleChoix();
+      renderPlats();
+      majBarre();
+    });
+  });
+}
+
+// recettes_ingredients peut depasser 1000 lignes (limite PostgREST) -> pagination pour tout charger
+async function fetchAllRI() {
+  const all = []; const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await sb.from('recettes_ingredients').select('*').order('id', { ascending: true }).range(from, from + PAGE - 1);
+    if (error) return { data: null, error };
+    all.push(...(data || []));
+    if (!data || data.length < PAGE) break;
+  }
+  return { data: all, error: null };
 }
 
 async function loadRecettesData() {
@@ -652,9 +797,12 @@ async function loadRecettesData() {
   try {
     const [recRes, riRes, ingRes, ctRes] = await Promise.all([
       sb.from('recettes').select('*').order('nom_du_plat'),
-      sb.from('recettes_ingredients').select('*').order('ordre', { ascending: true }),
+      fetchAllRI(),
       sb.from('ingredients').select('*'),
-      sb.from('creneaux_template').select('*')
+      // Reseau : la cliente ne voit que les creneaux de SA cuisiniere attribuee (assigne_a_id). Vide = la tete de reseau.
+      (clientProfile?.assigne_a_id
+        ? sb.from('creneaux_template').select('*').eq('salarie_id', clientProfile.assigne_a_id)
+        : sb.from('creneaux_template').select('*').is('salarie_id', null))
     ]);
     if (recRes.error) throw recRes.error;
     if (riRes.error) throw riRes.error;
@@ -674,7 +822,7 @@ function getLundis() {
   const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
   const dow = (new Date(y, m, d)).getDay() || 7;
   const diffToMonday = dow - 1;
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 6; i++) {
     const l = new Date(y, m, d - diffToMonday + i * 7);
     const v = new Date(y, m, d - diffToMonday + i * 7 + 4);
     const f = x => x.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });
@@ -710,9 +858,12 @@ async function affCreneaux(sem) {
     // Les créneaux pris sont lus via une fonction sécurisée (creneaux_pris) :
     // la RLS empêche une cliente de voir les commandes des autres, donc un
     // simple select ne renverrait que ses propres réservations.
+    const assigne = clientProfile?.assigne_a_id || null; // null = la tete de reseau
     const [cmdRes, crRes] = await Promise.all([
-      sb.rpc('creneaux_pris', { p_entreprise: clientProfile.entreprise_id, p_semaine: sem.id }),
-      sb.from('creneaux').select('*').eq('semaine', sem.id)
+      sb.rpc('creneaux_pris', { p_entreprise: clientProfile.entreprise_id, p_semaine: sem.id, p_salarie: assigne }),
+      (assigne
+        ? sb.from('creneaux').select('*').eq('semaine', sem.id).eq('salarie_id', assigne)
+        : sb.from('creneaux').select('*').eq('semaine', sem.id).is('salarie_id', null))
     ]);
     pris = cmdRes.data || [];
     crenRecs = crRes.data || [];
@@ -735,14 +886,15 @@ async function affCreneaux(sem) {
     const jl = jd.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
     getSlotsForJour(j).forEach(slot => {
       const h = fmtSlotLabel(slot.heure_debut, slot.heure_fin);
-      const lbl = `${jl} · ${h}`;
+      const nomCren = (slot.nom_slot || '').trim();
+      const lbl = `${jl}${nomCren ? ' · ' + nomCren : ''} · ${h}`;
       const slotKey = `${j}_${slot.nom_slot}`;
       const taken = pris.some(p => p.slot_key === slotKey || (p.creneau && p.creneau.trim() === lbl.trim()));
       const ferme = !isActif(j, slot.nom_slot);
       const el = document.createElement('div');
       el.className = 'citem' + ((taken || ferme) ? ' cpris' : '');
       const tag = taken ? '<span class="cpris-tag">Indisponible</span>' : ferme ? '<span class="cpris-tag">Ferme</span>' : '';
-      el.innerHTML = `<div class="cjour">${escapeHtml(jl)}</div><div style="display:flex;align-items:center;justify-content:space-between"><span>${h}</span>${tag}</div>`;
+      el.innerHTML = `<div class="cjour">${escapeHtml(jl)}</div><div style="display:flex;align-items:center;justify-content:space-between"><span>${nomCren ? escapeHtml(nomCren) + ' · ' : ''}${h}</span>${tag}</div>`;
       if (!taken && !ferme) {
         el.addEventListener('click', () => {
           document.querySelectorAll('.citem').forEach(x => x.classList.remove('on'));
@@ -756,9 +908,51 @@ async function affCreneaux(sem) {
   });
 }
 
-const CATS_FIXED = ['Viande', 'Poisson', 'Végé', 'Poulet', 'Pâtes', 'Cuisine du monde', 'Post partum', 'Sans porc'];
+const CATS_FIXED = ['Viande', 'Poisson', 'Végé', 'Poulet', 'Pâtes', 'Cuisine du monde', 'Post partum', 'Sans porc', 'Sans gluten', 'Sans lactose', 'Sucré', 'Tartes', 'Cakes'];
 let platSearch = '';
 let platCatFilter = 'all';
+let platTypeFilter = null; // type courant du filtre (null = auto = 1er type de la formule)
+
+// --- Types de plats (composition des formules) ---
+const PLAT_TYPES = [
+  { key: 'entree', label: 'Entrées', emoji: '🥗', sing: 'entrée' },
+  { key: 'plat', label: 'Plats', emoji: '🍽️', sing: 'plat' },
+  { key: 'dessert', label: 'Desserts', emoji: '🍰', sing: 'dessert' },
+  { key: 'petit_plus', label: 'Petits plus', emoji: '➕', sing: 'petit plus' }
+];
+function typeOf(rec) { return (rec && rec.type_plat) ? rec.type_plat : 'plat'; }
+// Quotas d'une formule ; défaut/fallback = 5 plats (comportement historique)
+function forfaitQuotas(f) {
+  if (!f) return { entree: 0, plat: 5, dessert: 0, petit_plus: 0 };
+  const q = {
+    entree: parseInt(f.nb_entrees, 10) || 0,
+    plat: (f.nb_plats == null ? 5 : (parseInt(f.nb_plats, 10) || 0)),
+    dessert: parseInt(f.nb_desserts, 10) || 0,
+    petit_plus: parseInt(f.nb_petit_plus, 10) || 0
+  };
+  if (q.entree + q.plat + q.dessert + q.petit_plus === 0) return { entree: 0, plat: 5, dessert: 0, petit_plus: 0 };
+  return q;
+}
+function currentQuotas() { return forfaitQuotas(forfaitSel); }
+// Types optionnels d'une formule : la cliente peut en prendre de 0 à N (au lieu d'exactement N)
+function forfaitOpt(f) { return f ? { entree: !!f.opt_entree, plat: !!f.opt_plat, dessert: !!f.opt_dessert, petit_plus: !!f.opt_petit_plus } : { entree: false, plat: false, dessert: false, petit_plus: false }; }
+function currentOpt() { return forfaitOpt(forfaitSel); }
+// Nombre d'éléments encore requis (les types optionnels ne comptent pas)
+function remainingRequired() { const q = currentQuotas(), o = currentOpt(); return PLAT_TYPES.reduce((a, t) => a + (o[t.key] ? 0 : Math.max(0, q[t.key] - selCountByType(t.key))), 0); }
+function activeTypes() { const q = currentQuotas(); return PLAT_TYPES.filter(t => q[t.key] > 0); }
+function isMultiType() { return activeTypes().length > 1; }
+function selCountByType(k) { return sel.filter(s => s.type === k).length; }
+function totalNeeded() { const q = currentQuotas(); return q.entree + q.plat + q.dessert + q.petit_plus; }
+function isSelComplete() {
+  const q = currentQuotas(), o = currentOpt();
+  const ok = PLAT_TYPES.every(t => { const have = selCountByType(t.key); return o[t.key] ? have <= q[t.key] : have === q[t.key]; });
+  return ok && sel.length >= 1; // au moins 1 élément (évite une commande vide si tout est optionnel)
+}
+// Elements d'une commande : nouveau format `items` (JSONB) sinon repli sur plat_1..5
+function cmdPlatIds(cmd) {
+  if (cmd && Array.isArray(cmd.items) && cmd.items.length) return cmd.items.map(it => it.recette_id).filter(Boolean);
+  return [cmd.plat_1_id, cmd.plat_2_id, cmd.plat_3_id, cmd.plat_4_id, cmd.plat_5_id].filter(Boolean);
+}
 
 // Catégories d'une recette : tableau `categories`, repli sur l'ancien champ `categorie`.
 function catsOf(rec) {
@@ -779,13 +973,37 @@ function renderPlatChips(containerId, current, onSelect, includeFavoris = false)
   c.querySelectorAll('.cat-chip').forEach(b => b.addEventListener('click', () => onSelect(b.dataset.cat)));
 }
 
+// Filtre par type (affiche seulement si la formule a plusieurs types), avec compteur par type
+function renderTypeChips(types) {
+  const c = $('platTypeChips');
+  if (!c) return;
+  if (!types.length) { c.innerHTML = ''; return; }
+  const q = currentQuotas();
+  const o = currentOpt();
+  c.innerHTML = types.map(t => {
+    const on = platTypeFilter === t.key;
+    const cnt = selCountByType(t.key);
+    const isOpt = o[t.key];
+    const done = isOpt || cnt >= q[t.key];
+    return `<button class="type-chip" data-type="${t.key}" style="padding:7px 13px;border:1.5px solid ${on ? 'var(--vert)' : 'var(--bgd)'};border-radius:18px;font-size:12.5px;cursor:pointer;font-family:'DM Sans',sans-serif;background:${on ? 'var(--vp)' : 'var(--bg)'};color:${on ? 'var(--vert)' : 'var(--txl)'};font-weight:${on ? '600' : '500'}">${t.emoji} ${t.label} <b style="color:${done ? '#2e7d32' : 'inherit'}">${cnt}/${q[t.key]}</b>${isOpt ? ' <span style="font-weight:400;color:var(--txl);font-size:11px">(option)</span>' : ''}</button>`;
+  }).join('');
+  c.querySelectorAll('.type-chip').forEach(b => b.addEventListener('click', () => { platTypeFilter = b.dataset.type; renderPlats(); }));
+}
+
 function renderPlats() {
   const g = $('pgrid');
   g.innerHTML = '';
+  const quotas = currentQuotas();
+  const types = activeTypes();
+  const multi = types.length > 1;
+  renderTypeChips(multi ? types : []);
   renderPlatChips('platCatChips', platCatFilter, (c) => { platCatFilter = c; renderPlats(); }, true);
   const search = platSearch.toLowerCase().trim();
   const actifs = recettes.filter(r => {
     if (getEtat(r) !== 'actif') return false;
+    const t = typeOf(r);
+    if (!quotas[t]) return false; // type absent de la formule -> non affiche
+    if (multi && platTypeFilter && t !== platTypeFilter) return false;
     if (platCatFilter === 'favoris' && !favoris.has(r.id)) return false;
     if (platCatFilter !== 'all' && platCatFilter !== 'favoris' && !catsOf(r).includes(platCatFilter)) return false;
     if (search && !(r.nom_du_plat || '').toLowerCase().includes(search)) return false;
@@ -799,8 +1017,12 @@ function renderPlats() {
     return;
   }
   actifs.forEach(rec => {
+    const t = typeOf(rec);
+    const selected = sel.some(s => s.id === rec.id);
+    const typeFull = selCountByType(t) >= quotas[t];
+    const typeMeta = PLAT_TYPES.find(x => x.key === t);
     const card = document.createElement('div');
-    card.className = 'pcard';
+    card.className = 'pcard' + (selected ? ' on' : '') + ((!selected && typeFull) ? ' off' : '');
     card.dataset.id = rec.id;
     const isFav = favoris.has(rec.id);
     card.innerHTML = `
@@ -809,7 +1031,7 @@ function renderPlats() {
       ${rec.photo_url ? `<img class="pimg" src="${escapeHtml(rec.photo_url)}" alt="${escapeHtml(rec.nom_du_plat)}" loading="lazy">` : `<div class="pph">🍽️</div>`}
       <div class="pinfo">
         <div class="ptop">
-          <span style="display:inline-flex;flex-wrap:wrap;gap:4px">${(catsOf(rec).length ? catsOf(rec) : ['Plat']).map(c => `<span class="pcat ${catCls(c)}">${escapeHtml(c)}</span>`).join('')}</span>
+          <span style="display:flex;flex-wrap:wrap;gap:4px;width:100%">${multi && typeMeta ? `<span class="pcat" style="background:#eef4f0;color:#3d6b4f">${typeMeta.emoji} ${escapeHtml(typeMeta.sing)}</span>` : ''}${(catsOf(rec).length ? catsOf(rec) : ['Plat']).map(c => `<span class="pcat ${catCls(c)}">${escapeHtml(c)}</span>`).join('')}${rec.au_four ? `<span class="pcat" style="background:#ffe8d6;color:#c1440e">🔥 Four</span>` : ''}</span>
           <button class="bing" data-act="ing" data-id="${rec.id}">🥕 Ingredients</button>
         </div>
         <div class="pnom">${escapeHtml(rec.nom_du_plat)}</div>
@@ -835,31 +1057,66 @@ function togglePlat(id, card) {
   const idx = sel.findIndex(p => p.id === id);
   if (idx > -1) {
     sel.splice(idx, 1);
-    card.classList.remove('on');
   } else {
-    if (sel.length >= 5) { showToast('Maximum 5 plats !', 'err'); return; }
     const rec = recettes.find(r => r.id === id);
     if (!rec) return;
-    sel.push({ id, nom: rec.nom_du_plat });
-    card.classList.add('on');
+    const t = typeOf(rec);
+    const quotas = currentQuotas();
+    if (!quotas[t]) { showToast('Ce type n\'est pas dans votre formule.', 'err'); return; }
+    if (selCountByType(t) >= quotas[t]) {
+      const meta = PLAT_TYPES.find(x => x.key === t);
+      const label = meta ? meta.sing : 'élément';
+      showToast(`Vous avez déjà choisi vos ${quotas[t]} ${label}${quotas[t] > 1 ? 's' : ''}.`, 'err');
+      return;
+    }
+    // Limite plats au four par commande (reglage entreprise ; vide = pas de limite)
+    const maxFour = CURRENT_BRANDING?.max_four_commande;
+    if (rec.au_four && maxFour != null && maxFour !== '') {
+      const nbFour = sel.filter(p => { const r = recettes.find(x => x.id === p.id); return r && r.au_four; }).length;
+      if (nbFour >= Number(maxFour)) {
+        showToast(`Maximum ${maxFour} plat${Number(maxFour) > 1 ? 's' : ''} au four par commande 🔥`, 'err');
+        return;
+      }
+    }
+    sel.push({ id, type: t, nom: rec.nom_du_plat });
   }
-  document.querySelectorAll('.pcard').forEach(c => {
-    if (!c.classList.contains('on')) c.classList.toggle('off', sel.length >= 5);
-  });
+  renderPlats(); // refresh compteurs + cartes desactivees
   majBarre();
 }
 
 function majBarre() {
+  const quotas = currentQuotas();
+  const types = activeTypes();
+  const multi = types.length > 1;
+  const total = totalNeeded();
   const n = sel.length;
-  const ok = n === 5 && semSel && crenSel;
-  for (let i = 1; i <= 5; i++) $('d' + i).classList.toggle('on', i <= n);
-  $('ctxt').textContent = n + ' / 5 plats';
+  for (let i = 1; i <= 5; i++) { const d = $('d' + i); if (d) d.classList.toggle('on', i <= n); }
+  let progress;
+  if (multi) {
+    const o = currentOpt();
+    progress = types.map(t => `${t.emoji} ${selCountByType(t.key)}/${quotas[t.key]}${o[t.key] ? ' (opt)' : ''}`).join(' · ');
+  } else {
+    const k = (types[0] || { key: 'plat' }).key;
+    const meta = PLAT_TYPES.find(x => x.key === k) || PLAT_TYPES[1];
+    progress = `${n} / ${quotas[k]} ${meta.label.toLowerCase()}`;
+  }
+  const ctxt = $('ctxt'); if (ctxt) ctxt.textContent = progress;
+  const btxt = $('btxt'); if (btxt) btxt.textContent = progress;
   $('barre').classList.toggle('show', n > 0);
-  $('btxt').textContent = n + ' / 5 plats selectionnes';
   $('bcren').textContent = crenSel ? '📅 ' + crenSel.lbl : semSel ? 'Choisissez un creneau' : 'Choisissez une semaine et un creneau';
+  const complete = isSelComplete();
+  const ok = complete && semSel && crenSel;
   const bv = $('bval');
   bv.disabled = !ok;
-  bv.textContent = ok ? '✓ Valider ma semaine' : (n < 5 ? 'Encore ' + (5 - n) + ' plat' + (5 - n > 1 ? 's' : '') : 'Choisissez un creneau');
+  if (!complete) {
+    const remaining = remainingRequired();
+    if (remaining > 0) bv.textContent = `Encore ${remaining} à choisir`;
+    else bv.textContent = n === 0 ? 'Choisissez au moins 1 plat' : 'Ajustez votre sélection';
+  } else {
+    bv.textContent = (semSel && crenSel) ? '✓ Valider ma semaine' : (semSel ? 'Choisissez un creneau' : 'Choisissez une semaine');
+  }
+  const h1 = document.querySelector('#pApp .banner h1');
+  if (h1) h1.textContent = multi ? 'Composez votre formule' : `Choisissez vos ${quotas.plat || total} plats de la semaine`;
 }
 
 function voirIngSel(platId) {
@@ -867,7 +1124,7 @@ function voirIngSel(platId) {
 }
 
 function valider() {
-  if (sel.length < 5 || !semSel || !crenSel) return;
+  if (!isSelComplete() || !semSel || !crenSel) return;
   afficherRecap();
 }
 
@@ -877,7 +1134,7 @@ function afficherRecap() {
   pop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999;display:flex;align-items:center;justify-content:center;padding:20px';
   const semaine = semSel ? semSel.label : '';
   const creneau = crenSel ? crenSel.lbl : '';
-  const instructionsPaiement = CURRENT_BRANDING?.instructions_paiement || '';
+  const instructionsPaiement = assignedSalarie?.instructions_paiement || CURRENT_BRANDING?.instructions_paiement || '';
   const cuisiniereName = CURRENT_BRANDING?.nom_contact || 'votre cuisiniere';
 
   // Initialise la selection forfait : par defaut le 1er actif (ou le moins cher)
@@ -885,10 +1142,24 @@ function afficherRecap() {
     forfaitSel = forfaits[0] || null;
   }
   const montantClient = forfaitSel?.prix ?? CURRENT_BRANDING?.montant_client_default ?? 60;
-  const platsHtml = sel.map((p, i) => `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #ede7db">
-    <span style="background:var(--vp);color:var(--vert);width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0">${i + 1}</span>
-    <span style="font-size:14px">${escapeHtml(p.nom)}</span>
-  </div>`).join('');
+  // Mode SAP : la ligne "A votre charge" affiche le reste apres credit d'impot (~50%)
+  const sapCI = !!CURRENT_BRANDING?.credit_impot_sap;
+  const aCharge = (prix) => sapCI ? `≈ ${Math.round(Number(prix) / 2)}€` : `${prix}€`;
+  const multiRecap = activeTypes().length > 1;
+  const selTitle = multiRecap ? '🍽️ Votre sélection' : `🍽️ Vos ${sel.length} plat${sel.length > 1 ? 's' : ''}`;
+  const platsHtml = multiRecap
+    ? activeTypes().map(t => {
+        const items = sel.filter(s => s.type === t.key);
+        if (!items.length) return '';
+        const rows = items.map(p => `<div style="display:flex;align-items:center;gap:8px;padding:5px 0">
+          <span style="width:7px;height:7px;border-radius:50%;background:var(--vert);flex-shrink:0"></span>
+          <span style="font-size:14px">${escapeHtml(p.nom)}</span></div>`).join('');
+        return `<div style="margin-bottom:10px"><div style="font-size:12px;font-weight:600;color:var(--vert);margin-bottom:2px">${t.emoji} ${t.label}</div>${rows}</div>`;
+      }).join('')
+    : sel.map((p, i) => `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #ede7db">
+        <span style="background:var(--vp);color:var(--vert);width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0">${i + 1}</span>
+        <span style="font-size:14px">${escapeHtml(p.nom)}</span>
+      </div>`).join('');
 
   pop.innerHTML = `<div id="recapBox" style="background:#fff;border-radius:20px;padding:0;max-width:480px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.2);overflow:hidden;max-height:90vh;overflow-y:auto">
     <div style="background:var(--vert);padding:24px;text-align:center;color:#fff">
@@ -906,30 +1177,24 @@ function afficherRecap() {
         <div style="font-size:15px;font-weight:500">${escapeHtml(creneau)}</div>
       </div>
       <div style="background:#f8f4ee;border-radius:12px;padding:14px 16px;margin-bottom:20px">
-        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#6b6b6b;margin-bottom:8px">🍽️ Vos 5 plats</div>
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#6b6b6b;margin-bottom:8px">${selTitle}</div>
         ${platsHtml}
       </div>
-      ${forfaits.length > 1 ? `<div style="background:#f8f4ee;border-radius:12px;padding:14px 16px;margin-bottom:16px">
-        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#6b6b6b;margin-bottom:10px">📦 Choisissez votre forfait</div>
-        <div id="forfaitChoix" style="display:flex;flex-direction:column;gap:8px">
-          ${forfaits.map(f => `
-            <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:2px solid ${f.id === forfaitSel?.id ? 'var(--vert)' : 'var(--bgd)'};border-radius:10px;cursor:pointer;background:${f.id === forfaitSel?.id ? 'var(--vp)' : 'var(--wh)'};transition:.15s">
-              <input type="radio" name="forfaitRadio" value="${f.id}" ${f.id === forfaitSel?.id ? 'checked' : ''} style="margin-top:2px;flex-shrink:0">
-              <div style="flex:1;min-width:0">
-                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px">
-                  <strong style="font-size:14px">${escapeHtml(f.nom)}</strong>
-                  ${f.badge ? `<span style="background:var(--vp);color:var(--vert);font-size:10px;padding:1px 7px;border-radius:8px;text-transform:uppercase;letter-spacing:.3px">${escapeHtml(f.badge)}</span>` : ''}
-                </div>
-                ${f.description ? `<div style="font-size:11px;color:#6b6b6b;line-height:1.4">${escapeHtml(f.description)}</div>` : ''}
-              </div>
-              <span style="font-size:16px;font-weight:700;color:var(--vert);white-space:nowrap">${f.prix}€</span>
-            </label>
-          `).join('')}
+      ${forfaitSel ? `<div style="background:#f8f4ee;border-radius:12px;padding:14px 16px;margin-bottom:16px">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#6b6b6b;margin-bottom:6px">📦 Votre formule</div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <strong style="font-size:14px">${escapeHtml(forfaitSel.nom)}</strong>
+          ${forfaitSel.badge ? `<span style="background:var(--vp);color:var(--vert);font-size:10px;padding:1px 7px;border-radius:8px;text-transform:uppercase;letter-spacing:.3px">${escapeHtml(forfaitSel.badge)}</span>` : ''}
         </div>
+        ${forfaitSel.description ? `<div style="font-size:11px;color:#6b6b6b;line-height:1.4;margin-top:2px">${escapeHtml(forfaitSel.description)}</div>` : ''}
       </div>` : ''}
-      <div style="background:var(--vp);border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:15px;font-weight:500">A votre charge</span>
-        <span id="recapMontant" style="font-size:20px;font-weight:700;color:var(--vert)">${montantClient}€</span>
+      ${sapCI ? `<div style="background:#f8f4ee;border-radius:12px;padding:11px 16px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:14px;color:#6b6b6b">Prestation</span>
+        <span id="recapPrestation" style="font-size:15px;font-weight:600">${montantClient}€</span>
+      </div>` : ''}
+      <div style="background:var(--vp);border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <span style="font-size:15px;font-weight:500">À votre charge${sapCI ? `<span style="display:block;font-size:11px;color:#6b6b6b;font-weight:400">après crédit d'impôt −50%</span>` : ''}</span>
+        <span id="recapMontant" style="font-size:20px;font-weight:700;color:var(--vert);white-space:nowrap">${aCharge(montantClient)}</span>
       </div>
       <div style="background:#f8f4ee;border-radius:12px;padding:12px 16px;margin-bottom:16px">
         <label for="recapMessage" style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#6b6b6b;margin-bottom:6px">💬 Message à ${escapeHtml(cuisiniereName)} (optionnel)</label>
@@ -947,21 +1212,6 @@ function afficherRecap() {
 
   $('recapModifier').addEventListener('click', () => pop.remove());
   $('recapConfirm').addEventListener('click', () => confirmerCommande(pop));
-  // Sync radio forfait → met a jour montant et selection
-  document.querySelectorAll('input[name="forfaitRadio"]').forEach(r => {
-    r.addEventListener('change', () => {
-      forfaitSel = forfaits.find(f => f.id === r.value) || null;
-      const m = $('recapMontant');
-      if (m && forfaitSel) m.textContent = `${forfaitSel.prix}€`;
-      // Re-render labels pour highlight visuel
-      document.querySelectorAll('#forfaitChoix label').forEach(lab => {
-        const inp = lab.querySelector('input');
-        const isSel = inp.value === forfaitSel?.id;
-        lab.style.borderColor = isSel ? 'var(--vert)' : 'var(--bgd)';
-        lab.style.background = isSel ? 'var(--vp)' : 'var(--wh)';
-      });
-    });
-  });
 }
 
 async function confirmerCommande(pop) {
@@ -970,7 +1220,7 @@ async function confirmerCommande(pop) {
   btn.textContent = 'Enregistrement...';
   btn.style.opacity = '0.6';
   btn.style.cursor = 'not-allowed';
-  const instructionsPaiement = CURRENT_BRANDING?.instructions_paiement || '';
+  const instructionsPaiement = assignedSalarie?.instructions_paiement || CURRENT_BRANDING?.instructions_paiement || '';
   try {
     // Anti double-réservation : re-vérifie que le créneau est toujours libre
     // juste avant d'insérer (le rendu de la liste peut dater). On passe par la
@@ -978,7 +1228,8 @@ async function confirmerCommande(pop) {
     if (crenSel.slotKey) {
       const { data: dejaPris } = await sb.rpc('creneaux_pris', {
         p_entreprise: clientProfile.entreprise_id,
-        p_semaine: semSel.id
+        p_semaine: semSel.id,
+        p_salarie: clientProfile?.assigne_a_id || null
       });
       if (dejaPris && dejaPris.some(p => p.slot_key === crenSel.slotKey)) {
         await creneauDejaPris(pop);
@@ -992,18 +1243,21 @@ async function confirmerCommande(pop) {
       creneau: crenSel.lbl,
       slot_key: crenSel.slotKey || null,
       statut: 'En attente de paiement',
-      plat_1_id: sel[0].id,
-      plat_2_id: sel[1].id,
-      plat_3_id: sel[2].id,
-      plat_4_id: sel[3].id,
-      plat_5_id: sel[4].id,
+      plat_1_id: sel[0]?.id || null,
+      plat_2_id: sel[1]?.id || null,
+      plat_3_id: sel[2]?.id || null,
+      plat_4_id: sel[3]?.id || null,
+      plat_5_id: sel[4]?.id || null,
+      items: sel.map((s, i) => ({ recette_id: s.id, type: s.type || 'plat', ordre: i })),
       nombre_portions: clientProfile?.nombre_portions || 4,
+      assigne_a_id: clientProfile?.assigne_a_id || null, // routage auto : la commande part a la cuisiniere attribuee (vide = la tete)
       forfait_id: forfaitSel?.id || null,
       montant: forfaitSel?.prix ?? CURRENT_BRANDING?.montant_client_default ?? 60,
       message_client: $('recapMessage')?.value.trim() || null
     };
-    const { error } = await sb.from('commandes').insert(payload);
-    if (error) throw error;
+    // writeVerified : si la session a expiré, on rafraîchit + réessaie ; si 0 ligne
+    // insérée sans erreur, on lève une erreur VISIBLE au lieu d'afficher un faux succès.
+    await writeVerified(() => sb.from('commandes').insert(payload).select('id'));
 
     // Remplace le contenu de la modal par l'ecran de succes
     $('recapBox').innerHTML = `
@@ -1040,9 +1294,9 @@ async function confirmerCommande(pop) {
     // Si le trigger DB rejette pour limite mensuelle, on affiche un message plus explicite
     if (/limite atteinte/i.test(msg) || /commandes\/mois/i.test(msg)) {
       const cuisiniere = CURRENT_BRANDING?.nom_contact || 'votre cuisiniere';
-      alert(`📦 Plafond mensuel atteint\n\nVotre cuisinière a déjà accepté le maximum de commandes pour ce mois. Contactez ${cuisiniere} ou réessayez le mois prochain.`);
+      showToast(`📦 Plafond mensuel atteint. Votre cuisinière a déjà accepté le maximum de commandes ce mois-ci. Contactez ${cuisiniere} ou réessayez le mois prochain.`, 'err');
     } else {
-      showToast('Erreur: ' + msg, 'err');
+      showToast('⚠️ ' + msgErr(e), 'err');
     }
   }
 }
@@ -1065,7 +1319,7 @@ function getSubdomainSlug() {
   if (host === 'mybatch.cooking' || host === 'www.mybatch.cooking') return null;
   if (host === 'localhost' || host.startsWith('127.') || host.startsWith('192.168.')) return null;
   let m = host.match(/^([^.]+)\.mybatch\.cooking$/);
-  if (m) return m[1] === 'www' ? null : m[1];
+  if (m) return (m[1] === 'www' || m[1] === 'app') ? null : m[1];
   m = host.match(/^([^.]+)\.netlify\.app$/);
   if (m) return m[1];
   return null;
@@ -1082,7 +1336,14 @@ const GENERIC_BRANDING = {
 };
 
 let CURRENT_BRANDING = null;
+let brandingEntLocked = false; // une entreprise a ete chargee -> ne plus ecraser avec le generique
 async function loadBranding(opts = {}) {
+  const explicit = !!(opts.id || opts.slug);
+  const applyGeneric = () => {
+    if (brandingEntLocked) return; // ne jamais ecraser un branding entreprise deja applique
+    CURRENT_BRANDING = GENERIC_BRANDING;
+    applyBranding(GENERIC_BRANDING);
+  };
   try {
     let qs = null;
     if (opts.id) qs = `id=${encodeURIComponent(opts.id)}`;
@@ -1091,23 +1352,16 @@ async function loadBranding(opts = {}) {
       const slug = getSubdomainSlug();
       if (slug) qs = `slug=${encodeURIComponent(slug)}`;
     }
-    if (!qs) {
-      CURRENT_BRANDING = GENERIC_BRANDING;
-      applyBranding(GENERIC_BRANDING);
-      return;
-    }
+    if (!qs) { applyGeneric(); return; }
     const r = await fetch(`/.netlify/functions/branding?${qs}`);
-    if (!r.ok) {
-      CURRENT_BRANDING = GENERIC_BRANDING;
-      applyBranding(GENERIC_BRANDING);
-      return;
-    }
+    if (!r.ok) { applyGeneric(); return; }
     const b = await r.json();
+    if (explicit) brandingEntLocked = true;
+    else if (brandingEntLocked) return; // course : une entreprise a deja ete chargee
     CURRENT_BRANDING = b;
     applyBranding(b);
   } catch (e) {
-    CURRENT_BRANDING = GENERIC_BRANDING;
-    applyBranding(GENERIC_BRANDING);
+    applyGeneric();
   }
 }
 
@@ -1129,7 +1383,7 @@ function applyBranding(b) {
   if (b.nom_contact) {
     const helpNote = document.querySelector('#pLogin .lcard .l-help');
     if (helpNote) {
-      if (b.slug) helpNote.innerHTML = `Problème de connexion ? Contactez <strong>${b.nom_contact}</strong>`;
+      if (b.slug) helpNote.innerHTML = `Problème de connexion ? Contactez <strong>${escapeHtml(b.nom_contact)}</strong>`;
     } else {
       const legacyNote = document.querySelector('#pLogin .lcard > div[style*="margin-top:20px"]');
       if (legacyNote) legacyNote.textContent = `Probleme ? Contactez ${b.nom_contact}.`;
@@ -1154,6 +1408,26 @@ function applyBranding(b) {
 document.addEventListener('DOMContentLoaded', async () => {
   loadBranding();
   $('btnLogin').addEventListener('click', login);
+  // Mot de passe oublie
+  $('forgotLink')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    const box = $('forgotBox');
+    const show = box.style.display === 'none';
+    box.style.display = show ? 'block' : 'none';
+    if (show) { const fe = $('iForgotEmail'); if (fe && !fe.value) fe.value = $('iEmail')?.value || ''; fe?.focus(); }
+  });
+  $('btnForgot')?.addEventListener('click', async () => {
+    const email = ($('iForgotEmail')?.value || '').trim();
+    const m = $('forgotMsg');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { m.style.color = '#c62828'; m.textContent = 'Entrez un email valide.'; return; }
+    const btn = $('btnForgot'); btn.disabled = true; btn.textContent = 'Envoi...';
+    try {
+      await fetch('/.netlify/functions/forgot-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
+    } catch (e) {}
+    m.style.color = '#2e7d32';
+    m.textContent = 'Si un compte existe avec cet email, un lien vient d\'être envoyé. Vérifiez votre boîte (et vos spams).';
+    btn.textContent = 'Lien envoyé ✓';
+  });
   $('btnLogout1').addEventListener('click', logout);
   $('btnLogout2').addEventListener('click', logout);
   $('btnLogout3').addEventListener('click', logout);
@@ -1212,7 +1486,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       window.location.href = 'admin.html';
       return;
     }
-    if (r.role === 'salarie') { window.location.href = 'salarie.html'; return; }
+    if (r.role === 'salarie') { window.location.href = 'partenaire.html'; return; }
     if (r.role === 'client') {
       clientProfile = r.data;
       if (clientProfile.entreprise_id && CURRENT_BRANDING?.id !== clientProfile.entreprise_id) {

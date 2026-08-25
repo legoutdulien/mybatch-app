@@ -46,7 +46,7 @@ exports.handler = async (event) => {
     // Fetch entreprises (avec service_role pour bypass RLS) en excluant LGDL et super-admin lui-meme
     const adminHeaders = { apikey: sbKey, Authorization: `Bearer ${sbKey}` };
     const entRes = await fetch(
-      `${sbUrl}/rest/v1/entreprises?select=*&slug=neq.${LGDL_SLUG_TO_EXCLUDE}&admin_email=neq.${encodeURIComponent(SUPER_ADMIN_EMAIL)}&order=created_at.desc`,
+      `${sbUrl}/rest/v1/entreprises?select=*&slug=not.in.(${LGDL_SLUG_TO_EXCLUDE},modele-mybatch)&admin_email=neq.${encodeURIComponent(SUPER_ADMIN_EMAIL)}&order=created_at.desc`,
       { headers: adminHeaders }
     );
     if (!entRes.ok) {
@@ -103,7 +103,13 @@ exports.handler = async (event) => {
       const s = e.subscription_status;
       if (s === 'active') {
         active_count++;
-        if (e.cycle === 'annuel') mrr += PRICE_ANNUEL_MOIS;
+        // Montant reel si defini (deals custom type Estelle 39€), sinon selon la formule / le cycle
+        if (e.abonnement_montant != null && e.abonnement_montant !== '') mrr += Number(e.abonnement_montant);
+        else if (e.formule === 'reseau_illimite') mrr += 279 + 30 * Math.max(0, (parseInt(e.reseau_cuisinieres, 10) || 8) - 8);
+        else if (e.formule === 'reseau_pro') mrr += 279;
+        else if (e.formule === 'reseau_starter') mrr += 149;
+        else if (e.formule === 'premium') mrr += 579;
+        else if (e.cycle === 'annuel') mrr += PRICE_ANNUEL_MOIS;
         else mrr += PRICE_MENSUEL;
       } else if (s === 'trialing') {
         trial_count++;

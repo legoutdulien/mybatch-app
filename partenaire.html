@@ -2,21 +2,27 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Le Goût du Lien – Espace Partenaire</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<link rel="manifest" href="/manifest-partenaire.json">
+<meta name="theme-color" content="#FAF6EE">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="my batch">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<script>if('serviceWorker' in navigator){addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){})})}</script>
+<title>my batch — Espace Partenaire</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-<link rel="apple-touch-icon" href="https://res.cloudinary.com/dgoqyp3wn/image/upload/v1774719838/ChatGPT_Image_28_mars_2026_18_37_48_u200aw.png">
 <link rel="icon" type="image/png" href="https://res.cloudinary.com/dgoqyp3wn/image/upload/v1774719838/ChatGPT_Image_28_mars_2026_18_37_48_u200aw.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Le Goût du Lien · Partenaire">
+<meta name="apple-mobile-web-app-title" content="my batch · Partenaire">
 <meta name="theme-color" content="#2d5a3d">
-<link rel="manifest" href="/manifest-salarie.json">
+<link rel="manifest" href="/manifest-partenaire.json">
 <style>
 :root{--vert:#3d6b4f;--vc:#5a8a6a;--vp:#eef4f0;--bg:#f8f4ee;--bgd:#ede7db;--tx:#2c2c2c;--txl:#6b6b6b;--wh:#fff;--sh:0 4px 24px rgba(0,0,0,.08);--r:16px}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);min-height:100vh}
-header{background:var(--vert);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:64px;position:sticky;top:0;z-index:100}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);min-height:100vh;overflow-x:hidden;overscroll-behavior-y:none}
+header{background:var(--vert);padding:0 24px;padding-top:env(safe-area-inset-top);display:flex;align-items:center;justify-content:space-between;height:calc(64px + env(safe-area-inset-top));position:sticky;top:0;z-index:100}
 .logo{font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:700;color:#fff}
 .logo span{font-size:12px;font-weight:400;opacity:.7;display:block;margin-top:-2px}
 .hbtn{padding:7px 14px;background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.3);border-radius:8px;font-size:13px;color:#fff;cursor:pointer;font-family:'DM Sans',sans-serif}
@@ -32,7 +38,7 @@ header{background:var(--vert);padding:0 24px;display:flex;align-items:center;jus
 .btnLogin:hover{background:var(--vc)}
 .lerr{background:#fdecea;color:#c62828;padding:10px;border-radius:9px;font-size:13px;margin-top:10px;display:none}
 #pSalarie{display:none}
-.main{padding:28px 24px;max-width:800px;margin:0 auto}
+.main{padding:28px 24px calc(90px + env(safe-area-inset-bottom));max-width:800px;margin:0 auto}
 .welcome{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:600;margin-bottom:6px}
 .welcome-sub{font-size:14px;color:var(--txl);margin-bottom:28px}
 .sem-nav{display:flex;align-items:center;gap:10px;margin-bottom:24px;flex-wrap:wrap}
@@ -82,7 +88,7 @@ header{background:var(--vert);padding:0 24px;display:flex;align-items:center;jus
 .cmd.today{border:2px solid var(--vert)}
 .cmd-num{font-size:11px;font-weight:600;margin-bottom:2px}
 .cmd-ev{font-size:9px;background:var(--vp);color:var(--vert);border-radius:3px;padding:1px 4px;margin-bottom:1px}
-.lov{position:fixed;inset:0;background:rgba(255,255,255,.85);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:999}
+.lov{position:fixed;inset:0;background:var(--bg);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:999}
 .spin{width:34px;height:34px;border:3px solid var(--bgd);border-top-color:var(--vert);border-radius:50%;animation:spin .8s linear infinite;margin-bottom:12px}
 @keyframes spin{to{transform:rotate(360deg)}}
 .ltxt{font-size:14px;color:var(--txl)}
@@ -90,7 +96,7 @@ header{background:var(--vert);padding:0 24px;display:flex;align-items:center;jus
   header{padding:0 14px;height:54px}
   .logo img{height:30px}
   .hbtn{padding:6px 10px;font-size:12px}
-  .main{padding:16px 14px 60px}
+  .main{padding:16px 14px calc(92px + env(safe-area-inset-bottom))}
   .welcome{font-size:20px}
   .stats-row{grid-template-columns:1fr 1fr;gap:8px}
   .stat-card{padding:12px}
@@ -132,6 +138,12 @@ header{background:var(--vert);padding:0 24px;display:flex;align-items:center;jus
 .welcome-hero .wtit{font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:600;position:relative;z-index:1;line-height:1.1}
 .welcome-hero .wsub{font-size:13px;opacity:.88;margin-top:6px;position:relative;z-index:1}
 .welcome-hero .wleaf{position:absolute;top:50%;right:18px;transform:translateY(-50%);width:64px;height:64px;opacity:.18;z-index:0}
+.ptabs{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--wh);border-top:1px solid var(--bgd);z-index:200;padding-bottom:env(safe-area-inset-bottom);box-shadow:0 -2px 14px rgba(0,0,0,.07)}
+.ptab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px 7px;background:none;border:none;color:var(--txl);font-family:'DM Sans',sans-serif;font-size:10px;line-height:1.1;cursor:pointer;transition:.15s}
+.ptab .pt-ic{font-size:21px;line-height:1}
+.ptab.active{color:var(--vert)}
+.ptab.active .pt-lb{font-weight:700}
+.section-card{background:var(--wh);box-shadow:var(--sh);border-radius:var(--r);padding:18px 20px}
 .notif-bell{position:relative;padding:6px 11px;background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.3);border-radius:8px;font-size:14px;color:#fff;cursor:pointer;line-height:1;font-family:'DM Sans',sans-serif;transition:.15s}
 .notif-bell:hover{background:rgba(255,255,255,.25)}
 .notif-bell-badge{position:absolute;top:-6px;right:-6px;background:#e63946;color:#fff;border-radius:10px;padding:0 5px;font-size:10px;font-weight:700;min-width:18px;height:18px;display:none;align-items:center;justify-content:center;line-height:1;border:2px solid var(--vert)}
@@ -156,7 +168,7 @@ header{background:var(--vert);padding:0 24px;display:flex;align-items:center;jus
 </style>
 </head>
 <body>
-<div class="lov" id="lov"><div class="spin"></div><div class="ltxt">Chargement...</div></div>
+<div class="lov" id="lov" style="display:flex"><div class="spin"></div><div class="ltxt">Connexion…</div></div>
 
 <!-- LOGIN -->
 <div id="pLogin">
@@ -164,7 +176,7 @@ header{background:var(--vert);padding:0 24px;display:flex;align-items:center;jus
   <svg class="login-bg-svg" style="bottom:10%;right:8%;width:110px" viewBox="0 0 100 100" fill="#3d6b4f"><path d="M20 50 Q35 20 50 50 Q35 80 20 50 M50 50 Q65 20 80 50 Q65 80 50 50"/></svg>
   <svg class="login-bg-svg" style="top:55%;left:15%;width:70px" viewBox="0 0 100 100" fill="#3d6b4f"><circle cx="50" cy="50" r="20"/><path d="M50 30 Q70 50 50 70 Q30 50 50 30"/></svg>
   <div class="lcard">
-    <img src="https://res.cloudinary.com/dgoqyp3wn/image/upload/v1774719838/ChatGPT_Image_28_mars_2026_18_37_48_u200aw.png" alt="Le Gout du Lien" style="height:70px;width:auto;object-fit:contain;display:block;margin:0 auto 12px">
+    <div style="font-size:30px;font-weight:800;letter-spacing:-.03em;color:#1a1a1a;text-align:center;margin:0 auto 12px">my batch<span style="color:#E8843D">.</span></div>
     <div class="ltag">Espace partenaire - Mon planning</div>
     <div class="fg"><label>Email</label><input type="email" id="iEmail" placeholder="votre adresse"></div>
     <div class="fg"><label>Mot de passe</label><input type="password" id="iMdp" placeholder="••••••••"></div>
@@ -176,7 +188,7 @@ header{background:var(--vert);padding:0 24px;display:flex;align-items:center;jus
 <!-- PLANNING -->
 <div id="pSalarie">
   <header>
-    <div class="logo"><img src="https://res.cloudinary.com/dgoqyp3wn/image/upload/v1774719838/ChatGPT_Image_28_mars_2026_18_37_48_u200aw.png" alt="Le Gout du Lien" style="height:34px;width:auto;object-fit:contain;display:block"></div>
+    <div class="logo" style="font-size:20px;font-weight:800;letter-spacing:-.03em;color:#1a1a1a">my batch<span style="color:#E8843D">.</span></div>
     <div style="display:flex;gap:10px;align-items:center">
       <div style="position:relative">
         <button class="notif-bell" id="notifBell">🔔<span class="notif-bell-badge" id="notifBellBadge">0</span></button>
@@ -192,24 +204,56 @@ header{background:var(--vert);padding:0 24px;display:flex;align-items:center;jus
       <div class="wtit" id="welcomeTxt">Bonjour !</div>
       <div class="wsub">Voici vos missions de la semaine</div>
     </div>
-    <div class="sem-nav">
-      <select class="sem-select" id="semSelect"></select>
+    <div class="ptabs" id="ptabs">
+      <button class="ptab active" data-ptab="planning"><span class="pt-ic">📋</span><span class="pt-lb">Planning</span></button>
+      <button class="ptab" data-ptab="creneaux"><span class="pt-ic">🕐</span><span class="pt-lb">Créneaux</span></button>
+      <button class="ptab" data-ptab="recettes"><span class="pt-ic">🍽️</span><span class="pt-lb">Recettes</span></button>
+      <button class="ptab" data-ptab="forfaits"><span class="pt-ic">📦</span><span class="pt-lb">Forfaits</span></button>
+      <button class="ptab" data-ptab="paiement"><span class="pt-ic">💳</span><span class="pt-lb">Paiement</span></button>
+      <button class="ptab" data-ptab="clientes"><span class="pt-ic">👥</span><span class="pt-lb">Clientes</span></button>
     </div>
-    <div class="stats-row" id="statsRow"></div>
-    <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
-      <button id="btnListe" style="padding:9px 18px;background:var(--vert);color:#fff;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer">Liste</button>
-      <button id="btnSem" style="padding:9px 18px;background:var(--bgd);color:var(--tx);border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer">Semaine</button>
-      <button id="btnMois" style="padding:9px 18px;background:var(--bgd);color:var(--tx);border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer">Mois</button>
+
+    <div class="ptab-panel" id="panelPlanning">
+      <div class="sem-nav">
+        <select class="sem-select" id="semSelect"></select>
+      </div>
+      <div class="stats-row" id="statsRow"></div>
+      <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
+        <button id="btnListe" style="padding:9px 18px;background:var(--vert);color:#fff;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer">Liste</button>
+        <button id="btnSem" style="padding:9px 18px;background:var(--bgd);color:var(--tx);border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer">Semaine</button>
+        <button id="btnMois" style="padding:9px 18px;background:var(--bgd);color:var(--tx);border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer">Mois</button>
+      </div>
+      <div id="calSemDiv" style="display:none;margin-bottom:20px">
+        <select class="sem-select" id="calSemSelect"></select>
+      </div>
+      <div id="calMoisDiv" style="display:none;margin-bottom:20px">
+        <select class="sem-select" id="calMoisSelect"></select>
+      </div>
+      <div id="calContainer" style="display:none"></div>
+      <div class="stit" id="listeTitre">Mes missions</div>
+      <div id="missionsDiv"></div>
     </div>
-    <div id="calSemDiv" style="display:none;margin-bottom:20px">
-      <select class="sem-select" id="calSemSelect"></select>
+
+    <div class="ptab-panel" id="panelCreneaux" style="display:none">
+      <div class="stit">🕐 Mes créneaux</div>
+      <div class="section-card"><div id="mesCreneauxBody"></div></div>
     </div>
-    <div id="calMoisDiv" style="display:none;margin-bottom:20px">
-      <select class="sem-select" id="calMoisSelect"></select>
+    <div class="ptab-panel" id="panelRecettes" style="display:none">
+      <div class="stit">🍽️ Mes recettes</div>
+      <div class="section-card"><div id="mesRecettesBody"></div></div>
     </div>
-    <div id="calContainer" style="display:none"></div>
-    <div class="stit" id="listeTitre">Mes missions</div>
-    <div id="missionsDiv"></div>
+    <div class="ptab-panel" id="panelForfaits" style="display:none">
+      <div class="stit">📦 Mes forfaits</div>
+      <div class="section-card"><div id="mesForfaitsBody"></div></div>
+    </div>
+    <div class="ptab-panel" id="panelPaiement" style="display:none">
+      <div class="stit">💳 Mes modalités de paiement</div>
+      <div class="section-card"><div id="monPaiementBody"></div></div>
+    </div>
+    <div class="ptab-panel" id="panelClientes" style="display:none">
+      <div class="stit">👥 Mes clientes</div>
+      <div class="section-card"><div id="mesClientesBody"></div></div>
+    </div>
   </div>
 </div>
 

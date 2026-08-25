@@ -29,10 +29,10 @@ exports.handler = async (event) => {
   try { body = JSON.parse(event.body || '{}'); }
   catch { return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: 'Invalid JSON' }) }; }
 
-  const { plan, nom_marque, slug, email, password, cgu, renonce_retractation } = body;
+  const { plan, nom_marque, slug, email, password, cgu, renonce_retractation, nb_cuisinieres } = body;
 
   // Validations
-  if (!['mensuel','annuel'].includes(plan)) return jsonErr(corsHeaders, 400, 'Plan invalide');
+  if (!['mensuel','annuel','reseau_starter','reseau_pro','reseau_illimite'].includes(plan)) return jsonErr(corsHeaders, 400, 'Plan invalide');
   if (!nom_marque || nom_marque.length < 2) return jsonErr(corsHeaders, 400, 'Nom de marque requis');
   if (!slug || !/^[a-z0-9-]{3,50}$/.test(slug)) return jsonErr(corsHeaders, 400, 'Slug invalide');
   if (FORBIDDEN_SLUGS.has(slug)) return jsonErr(corsHeaders, 400, 'Ce slug est reserve, choisissez-en un autre');
@@ -64,16 +64,29 @@ exports.handler = async (event) => {
   }
 
   // Choix du price_id
-  const priceId = plan === 'annuel'
-    ? process.env.STRIPE_PRICE_ANNUEL
-    : process.env.STRIPE_PRICE_MENSUEL;
+  const PRICE_ENV = {
+    mensuel: process.env.STRIPE_PRICE_MENSUEL,
+    annuel: process.env.STRIPE_PRICE_ANNUEL,
+    reseau_starter: process.env.STRIPE_PRICE_RESEAU_STARTER,
+    reseau_pro: process.env.STRIPE_PRICE_RESEAU_PRO,
+    reseau_illimite: process.env.STRIPE_PRICE_RESEAU_ILLIMITE
+  };
+  const priceId = PRICE_ENV[plan];
   if (!priceId) return jsonErr(corsHeaders, 500, `Price ID manquant pour ${plan}`);
+
+  // Illimite : tarif a paliers, la quantite = nombre de cuisinieres (min 9). Stripe calcule 279 + 30*(n-8).
+  let quantity = 1;
+  if (plan === 'reseau_illimite') {
+    quantity = parseInt(nb_cuisinieres, 10);
+    if (!Number.isFinite(quantity) || quantity < 9) quantity = 9;
+    if (quantity > 200) quantity = 200;
+  }
 
   // Cree la Checkout Session
   const params = new URLSearchParams();
   params.append('mode', 'subscription');
   params.append('line_items[0][price]', priceId);
-  params.append('line_items[0][quantity]', '1');
+  params.append('line_items[0][quantity]', String(quantity));
   params.append('subscription_data[trial_period_days]', '7');
   params.append('customer_email', email);
   params.append('billing_address_collection', 'required');
@@ -85,6 +98,7 @@ exports.handler = async (event) => {
   params.append('metadata[signup_nom_marque]', nom_marque);
   params.append('metadata[signup_slug]', slug);
   params.append('metadata[signup_plan]', plan);
+  params.append('metadata[signup_nb_cuisinieres]', String(quantity));
   params.append('metadata[signup_renonce_retractation]', renonce_retractation ? 'true' : 'false');
   params.append('metadata[signup_cgu_accepted_at]', new Date().toISOString());
   params.append('subscription_data[metadata][signup_slug]', slug);

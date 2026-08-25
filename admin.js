@@ -14,12 +14,25 @@ let CURRENT_ADMIN_NOM = '';
 let CURRENT_ADMIN_USER_ID = null;
 let CURRENT_PLAN = 'standard';
 const isFounder = () => CURRENT_PLAN === 'founder';
+// Formule reseau : debloque les fonctions reseau (onglet Partenaires, attribution) sans donner l'acces superadmin
+let CURRENT_FORMULE = 'standard';
+const isReseau = () => ['reseau_starter', 'reseau_pro', 'reseau_illimite'].includes(CURRENT_FORMULE);
 
 const PLAN_LIMITS = { recettes: 200, clientes: 30, commandes_mois: 80, photos_mb: 800 };
+// Limites selon la formule : le solo standard vs les paliers reseau (qui gerent plusieurs cuisinieres, donc plus de clientes/commandes)
+const LIMITS_BY_FORMULE = {
+  standard:       { recettes: 200, clientes: 30,  commandes_mois: 80,  photos_mb: 800 },
+  premium:        { recettes: 500, clientes: 80,  commandes_mois: 200, photos_mb: 2000 },
+  reseau_starter:  { recettes: 400,  clientes: 120,  commandes_mois: 300,  photos_mb: 2000 },
+  reseau_pro:      { recettes: 800,  clientes: 320,  commandes_mois: 800,  photos_mb: 4000 },
+  reseau_illimite: { recettes: 2000, clientes: 3000, commandes_mois: 6000, photos_mb: 12000 }
+};
+function limitsFor(formule) { return LIMITS_BY_FORMULE[formule] || LIMITS_BY_FORMULE.standard; }
+function planLimits() { try { return limitsFor(getCurrentEntreprise() && getCurrentEntreprise().formule); } catch (e) { return LIMITS_BY_FORMULE.standard; } }
 
 async function checkPlanLimit(kind, label) {
   if (isFounder()) return true;
-  const max = PLAN_LIMITS[kind];
+  const max = planLimits()[kind];
   let q;
   if (kind === 'recettes') q = sb.from('recettes').select('*', { count: 'exact', head: true }).eq('entreprise_id', CURRENT_ENTREPRISE_ID);
   else if (kind === 'clientes') q = sb.from('clients').select('*', { count: 'exact', head: true }).eq('entreprise_id', CURRENT_ENTREPRISE_ID);
@@ -57,6 +70,21 @@ function getTemplateSorted() {
 }
 function getSlotsForJour(jour) {
   return DATA.creneauxTemplate.filter(t => t.jour === jour).sort((a, b) => (a.ordre || 0) - (b.ordre || 0));
+}
+// Créneaux de la tête de réseau uniquement (salarie_id null) — chaque cuisinière gère les siens dans son portail
+function mesSlotsForJour(jour) {
+  return DATA.creneauxTemplate.filter(t => t.jour === jour && !t.salarie_id).sort((a, b) => (a.ordre || 0) - (b.ordre || 0));
+}
+
+// Traduit n'importe quelle erreur technique en message clair pour l'utilisateur (jamais de SQL brut)
+function msgErr(e) {
+  const m = String((e && (e.message || (e.error && e.error.message))) || e || '');
+  const c = e && (e.code || (e.error && e.error.code));
+  if (c === '23505' || /duplicate key|unique constraint|existe déjà/i.test(m)) return 'Ça existe déjà.';
+  if (c === '23503' || /foreign key|violates foreign/i.test(m)) return 'Impossible : cet élément est encore utilisé ailleurs.';
+  if (/row-level security|not authorized|permission denied|jwt|invalid token|\b401\b|\b403\b|session/i.test(m)) return 'Action refusée (session expirée ?). Reconnecte-toi et réessaie.';
+  if (/failed to fetch|networkerror|network error|load failed|timeout|net::/i.test(m)) return 'Problème de connexion. Vérifie ta connexion et réessaie.';
+  return "L'action n'a pas pu être effectuée. Recharge la page (Ctrl+F5) et réessaie.";
 }
 let curOffset = 0, crenOffset = 0;
 let calYear, calMonth;
@@ -127,7 +155,7 @@ async function loadAdminFromSession() {
       if (tImg) { tImg.src = cfg.logo_url; }
       if (tBox) tBox.style.display = 'flex';
     }
-    if (cfg.couleur_topbar) document.documentElement.style.setProperty('--topbar-bg', cfg.couleur_topbar);
+    if (cfg.couleur_topbar) setTopbarColor(cfg.couleur_topbar);
     // SECURITE : l'admin travaille avec SA propre session (cle anon + RLS).
     // Le service_role n'est plus jamais expose au navigateur ; les operations
     // privilegiees passent par /.netlify/functions/admin-action.
@@ -136,7 +164,7 @@ async function loadAdminFromSession() {
     $('pApp').style.display = 'flex';
     chargerTout();
   } catch (e) {
-    if (err) { err.textContent = 'Erreur : ' + e.message; err.style.display = 'block'; }
+    if (err) { err.textContent = msgErr(e); err.style.display = 'block'; }
     setTimeout(() => { window.location.href = '/'; }, 2000);
   }
 }
@@ -191,15 +219,31 @@ async function chargerTout() {
     }
     DATA.forfaits = (forfR && forfR.data) || [];
 
-    // recettes_ingredients : pas de colonne entreprise_id, on filtre via les recettes chargees
-    const recIds = new Set(DATA.recettes.map(r => r.id));
-    const riR = DATA.recettes.length
-      ? await sb.from('recettes_ingredients').select('*')
-          .in('recette_id', [...recIds])
-          .order('ordre', { ascending: true })
-      : { data: [], error: null };
-    if (riR.error) throw riR.error;
-    DATA.ri = riR.data || [];
+    // Formule reseau : debloque l'UI reseau (onglet Partenaires). Le serveur autorise deja tout admin a gerer ses partenaires.
+    const _cur = DATA.entreprises.find(e => e.id === CURRENT_ENTREPRISE_ID) || DATA.entreprises[0];
+    CURRENT_FORMULE = (_cur && _cur.formule) || 'standard';
+    document.body.classList.toggle('plan-reseau', isReseau());
+
+    // recettes_ingredients : peut depasser la limite PostgREST (1000 lignes) sur les grosses
+    // banques de recettes -> on pagine pour tout charger (sinon des ingredients apparaissent
+    // "inutilises" a tort et la suppression echoue en FK).
+    const recIds = [...new Set(DATA.recettes.map(r => r.id))];
+    DATA.ri = [];
+    if (recIds.length) {
+      const PAGE = 1000;
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await sb.from('recettes_ingredients').select('*')
+          .in('recette_id', recIds)
+          .order('id', { ascending: true })
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        DATA.ri.push(...(data || []));
+        if (!data || data.length < PAGE) break;
+      }
+    }
+
+    // Photos de mission (plats préparés par les cuisinières) — purge auto à 14 jours côté base
+    try { const mpR = await scoped(sb.from('mission_photos').select('*')); DATA.missionPhotos = mpR.data || []; } catch (e) { DATA.missionPhotos = []; }
 
     populateUnitDatalist();
     setupRealtimeNotifs();
@@ -215,7 +259,7 @@ async function chargerTout() {
     $('ariaSt').textContent = `${actifs} plats · ${DATA.clients.length} clients`;
     addAriaMsg('bot', `**Bonjour !** 🌿\n\nToutes vos donnees sont chargees. Disponible en texte ou a la voix 🎤`);
   } catch (e) {
-    $('content').innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-txt">Erreur : ${escapeHtml(e.message || String(e))}</div></div>`;
+    $('content').innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-txt">${escapeHtml(msgErr(e))}</div></div>`;
   }
 }
 
@@ -239,12 +283,30 @@ function semLabel(off = 0) {
 }
 function getRecette(id) { return DATA.recettes.find(r => r.id === id); }
 function getEtat(r) { return (r && r.etat) ? r.etat : (r && r.active ? 'actif' : 'inactif'); }
+
+// Applique la couleur de la barre du haut ET calcule un texte lisible dessus
+// (foncé si la couleur choisie est claire, blanc si elle est foncée) — marche pour
+// n'importe quelle couleur personnalisee par la batchcookeuse.
+function setTopbarColor(color) {
+  const root = document.documentElement;
+  if (!color) return;
+  root.style.setProperty('--topbar-bg', color);
+  let c = String(color).replace('#', '').trim();
+  if (c.length === 3) c = c.split('').map(x => x + x).join('');
+  if (c.length < 6) { root.style.setProperty('--topbar-fg', '#ffffff'); return; }
+  const r = parseInt(c.substr(0, 2), 16), g = parseInt(c.substr(2, 2), 16), b = parseInt(c.substr(4, 2), 16);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255; // luminance perçue 0..1
+  root.style.setProperty('--topbar-fg', lum > 0.6 ? '#1A1A1A' : '#ffffff');
+}
 function getClient(id) { return DATA.clients.find(c => c.id === id); }
 function getSalarie(id) { return DATA.salaries.find(s => s.id === id); }
+// Elements d'une commande : nouveau format `items` (JSONB) sinon repli sur plat_1..5
+function cmdPlatIds(c) {
+  if (c && Array.isArray(c.items) && c.items.length) return c.items.map(it => it.recette_id).filter(Boolean);
+  return [c.plat_1_id, c.plat_2_id, c.plat_3_id, c.plat_4_id, c.plat_5_id].filter(Boolean);
+}
 function platsOfCommande(c) {
-  return [c.plat_1_id, c.plat_2_id, c.plat_3_id, c.plat_4_id, c.plat_5_id]
-    .map(id => id ? getRecette(id) : null)
-    .filter(Boolean);
+  return cmdPlatIds(c).map(id => getRecette(id)).filter(Boolean);
 }
 function showContent(html) { $('content').innerHTML = html; }
 function showTab(tab) {
@@ -310,11 +372,44 @@ function bindPlanningSwitcher() {
   $('vPlanMois')?.addEventListener('click', () => { planningView = 'mois'; renderPlanning(); });
 }
 
+// Reseau : filtre du planning par cuisiniere (all = tout, me = la tete, sinon une cuisiniere)
+let planningAssigneFilter = 'all';
+function filterAssigne(cmds) {
+  if (planningAssigneFilter === 'all') return cmds;
+  if (planningAssigneFilter === 'me') return cmds.filter(c => !c.assigne_a_id);
+  return cmds.filter(c => c.assigne_a_id === planningAssigneFilter);
+}
+function planningAssigneBar() {
+  if (!isReseau() || !DATA.salaries.length) return '';
+  const chip = (val, label) => {
+    const on = planningAssigneFilter === val;
+    return `<button class="plan-asg-chip" data-asg="${escapeAttr(val)}" style="padding:5px 12px;border:1.5px solid ${on ? 'var(--v3)' : 'var(--bgd)'};background:${on ? 'var(--vp)' : 'var(--bgc)'};color:${on ? 'var(--v2)' : 'var(--txm)'};border-radius:16px;font-size:12px;cursor:pointer;font-weight:${on ? '600' : '400'};font-family:'DM Sans',sans-serif">${label}</button>`;
+  };
+  return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;align-items:center">
+    <span style="font-size:12px;color:var(--txl)">Voir :</span>
+    ${chip('all', 'Tout le réseau')}${chip('me', '👑 Mes commandes')}${DATA.salaries.map(s => chip(s.id, '👨‍🍳 ' + escapeHtml(s.nom || '–'))).join('')}
+  </div>`;
+}
+function bindPlanningAssigne() {
+  $('content').querySelectorAll('.plan-asg-chip').forEach(b => b.addEventListener('click', () => { planningAssigneFilter = b.dataset.asg; renderPlanning(); }));
+}
+
 // --- PLANNING : VUE LISTE (hebdo) ---
+// Cle de tri chronologique d'une commande a partir de son creneau ("Lundi · 9h00 - 11h00")
+function cmdChronoKey(c) {
+  const s = (c.creneau || '').toLowerCase();
+  const jours = { lundi: 1, mardi: 2, mercredi: 3, jeudi: 4, vendredi: 5, samedi: 6, dimanche: 7 };
+  let d = 8;
+  for (const k in jours) { if (s.includes(k)) { d = jours[k]; break; } }
+  const m = s.match(/(\d{1,2})\s*h\s*(\d{2})?/);
+  const mins = m ? (parseInt(m[1], 10) * 60 + (m[2] ? parseInt(m[2], 10) : 0)) : 9999;
+  return d * 100000 + mins;
+}
 function renderPlanningListe() {
   const semaine = getMonday(curOffset);
-  const cmdSem = DATA.commandes.filter(c => (c.semaine_du || '').startsWith(semaine));
-  const salOpts = `<option value="">Non assigne</option>` +
+  const cmdSem = filterAssigne(DATA.commandes.filter(c => (c.semaine_du || '').startsWith(semaine)));
+  cmdSem.sort((a, b) => cmdChronoKey(a) - cmdChronoKey(b)); // ordre chronologique (jour + heure du creneau)
+  const salOpts = `<option value="">${escapeHtml((getCurrentEntreprise() || {}).nom_marque || 'Mon compte')}</option>` +
     DATA.salaries.map(s => `<option value="${s.id}">${escapeHtml(s.nom || '–')}</option>`).join('');
 
   const stats = `<div class="stats-row">
@@ -329,35 +424,34 @@ function renderPlanningListe() {
     const plats = platsOfCommande(c);
     const statut = c.statut || 'En attente de paiement';
     const bc = statut === 'Confirmée' ? 'b-ok' : 'b-en';
+    const statutLabel = statut === 'Confirmée' ? '✓ Confirmée' : '⏳ À confirmer';
     return `<div class="cmd-card">
-      <div class="cmd-top">
-        <div class="cmd-info">
-          <div class="cmd-client">${escapeHtml(cli.nom || '–')} <span class="badge ${bc}">${escapeHtml(statut)}</span>${(() => { const f = DATA.forfaits.find(x => x.id === c.forfait_id); const needs = f?.inclut_courses || cli.courses_par_cuisiniere; return needs ? ' <span class="badge" style="background:#fff3cd;color:#8a6a1a;border:1px solid #f6e0a3">🛒 Courses à faire</span>' : ''; })()}</div>
-          <div class="cmd-meta">
-            <span class="cmd-meta-item">📅 ${escapeHtml(c.creneau || '–')}</span>
-            <span class="cmd-meta-item">🍽️ ${c.nombre_portions || 4} portions</span>
-            ${(() => { const f = DATA.forfaits.find(x => x.id === c.forfait_id); return f ? `<span class="cmd-meta-item" style="background:var(--vp);color:var(--v2);padding:2px 8px;border-radius:8px;font-weight:600">📦 ${escapeHtml(f.nom)} · ${f.prix}€</span>` : (c.montant ? `<span class="cmd-meta-item">💶 ${c.montant}€</span>` : ''); })()}
-            ${cli.adresse ? `<a class="cmd-meta-item" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cli.adresse)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--bgd)">📍 ${escapeHtml(cli.adresse)}</a>` : ''}
-            ${cli.telephone ? `<a class="cmd-meta-item" href="tel:${escapeAttr(cli.telephone.replace(/\s/g, ''))}" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--bgd)">📞 ${escapeHtml(cli.telephone)}</a>` : ''}
-          </div>
-        </div>
-        <div class="cmd-actions">
-          <button class="btn btn-ghost btn-sm" data-act="see-courses" data-id="${c.id}" title="Liste de courses">🛒</button>
-          <button class="btn btn-ghost btn-sm" data-act="edit-cmd" data-id="${c.id}">✏️ Modifier</button>
-          <button class="btn btn-danger btn-sm" data-act="del-cmd" data-id="${c.id}">🗑️</button>
-        </div>
+      <div class="cmd-client">${escapeHtml(cli.nom || '–')} <button class="badge ${bc}" data-act="toggle-statut" data-id="${c.id}" title="Cliquer pour confirmer / remettre à confirmer" style="cursor:pointer;border:none;font-family:inherit;vertical-align:middle">${statutLabel}</button>${(() => { const f = DATA.forfaits.find(x => x.id === c.forfait_id); const needs = f?.inclut_courses || cli.courses_par_cuisiniere; return needs ? ' <span class="badge" style="background:#fff3cd;color:#8a6a1a;border:1px solid #f6e0a3">🛒 Courses à faire</span>' : ''; })()}</div>
+      <div class="cmd-actions">
+        <button class="btn btn-ghost btn-sm" data-act="see-courses" data-id="${c.id}" title="Liste de courses">🛒</button>
+        ${(() => { const n = (DATA.missionPhotos || []).filter(mp => mp.commande_id === c.id).length; return `<button class="btn btn-ghost btn-sm" data-act="mission-photos" data-id="${c.id}" title="Photos des plats préparés (voir / ajouter)">📷${n ? ' ' + n : ''}</button>`; })()}
+        <button class="btn btn-ghost btn-sm" data-act="edit-cmd" data-id="${c.id}">✏️ Modifier</button>
+        <button class="btn btn-danger btn-sm" data-act="del-cmd" data-id="${c.id}">🗑️</button>
       </div>
+      <div class="cmd-logi">
+        <span class="cmd-meta-item">📅 ${escapeHtml(c.creneau || '–')}</span>
+        ${(() => { const f = DATA.forfaits.find(x => x.id === c.forfait_id); return f ? `<span class="cmd-meta-item" style="background:var(--vp);color:var(--v2);padding:2px 8px;border-radius:8px;font-weight:600">📦 ${escapeHtml(f.nom)} · ${f.prix}€</span>` : (c.montant ? `<span class="cmd-meta-item">💶 ${c.montant}€</span>` : ''); })()}
+        <span class="cmd-meta-item">🍽️ ${c.nombre_portions || 4} portions</span>
+      </div>
+      ${cli.adresse ? `<a class="cmd-addr" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cli.adresse)}" target="_blank" rel="noopener">📍 ${escapeHtml(cli.adresse)}</a>` : ''}
+      ${cli.telephone ? `<a class="cmd-phone" href="tel:${escapeAttr(cli.telephone.replace(/\s/g, ''))}">📞 ${escapeHtml(cli.telephone)}</a>` : ''}
       <div class="cmd-plats">${plats.map(p => `<span class="plat-chip" data-act="see-ing" data-id="${p.id}" data-portions="${c.nombre_portions || 4}">${escapeHtml(p.nom_du_plat)}</span>`).join('') || '<span style="font-size:12px;color:var(--txl)">Aucun plat selectionne</span>'}</div>
-      ${c.message_client ? `<div style="background:#fff3cd;border-left:3px solid #f6c343;border-radius:8px;padding:10px 12px;margin-top:10px;font-size:12px;color:#6b5818"><strong style="color:#8a6a1a">💬 Message de ${escapeHtml(cli.nom || 'la cliente')} :</strong><div style="margin-top:4px;white-space:pre-wrap">${escapeHtml(c.message_client)}</div></div>` : ''}
-      <div class="cmd-footer">
+      ${c.message_client ? `<div style="background:#fff3cd;border-left:3px solid #f6c343;border-radius:8px;padding:10px 12px;margin-top:10px;font-size:12px;color:#6b5818"><strong style="color:#8a6a1a">💬 Message de ${escapeHtml(cli.nom || 'la cliente')} :</strong><div style="margin-top:4px;white-space:pre-wrap">${escapeHtml(c.message_client)}</div>${c.client_id ? `<button class="btn btn-sm" data-act="reply-msg" data-client="${escapeAttr(c.client_id)}" style="margin-top:8px;background:#8a6a1a;color:#fff;border:none;padding:5px 12px;border-radius:14px;font-size:12px;cursor:pointer">↩️ Répondre</button>` : ''}</div>` : ''}
+      ${DATA.salaries.length ? `<div class="cmd-footer">
         <span style="font-size:12px;color:var(--txl)">Assigne a :</span>
         <select class="assign-sel" data-act="assign" data-id="${c.id}">${salOpts}</select>
-      </div>
+      </div>` : ''}
     </div>`;
   }).join('') : `<div class="empty"><div class="empty-icon">📭</div><div class="empty-txt">Aucune commande cette semaine</div></div>`;
 
   showContent(`<div class="card">
     ${planningSwitcher()}
+    ${planningAssigneBar()}
     <div class="card-head">
       <div class="card-tit">📅 Planning <span>${cmdSem.length} commande(s)</span></div>
     </div>
@@ -377,6 +471,7 @@ function renderPlanningListe() {
   });
 
   bindPlanningSwitcher();
+  bindPlanningAssigne();
   $('prevSem')?.addEventListener('click', () => { curOffset--; renderPlanning(); });
   $('nextSem')?.addEventListener('click', () => { curOffset++; renderPlanning(); });
   $('todaySem')?.addEventListener('click', () => { curOffset = 0; renderPlanning(); });
@@ -386,35 +481,118 @@ function renderPlanningListe() {
   $('content').querySelectorAll('[data-act="see-ing"]').forEach(b => b.addEventListener('click', () => voirIngredients(b.dataset.id, parseInt(b.dataset.portions, 10) || 4)));
   $('content').querySelectorAll('[data-act="assign"]').forEach(s => s.addEventListener('change', (e) => assignerSalarie(s.dataset.id, e.target.value)));
   $('content').querySelectorAll('[data-act="see-courses"]').forEach(b => b.addEventListener('click', () => voirCoursesCommande(b.dataset.id)));
+  $('content').querySelectorAll('[data-act="mission-photos"]').forEach(b => b.addEventListener('click', () => voirMissionPhotos(b.dataset.id)));
+  $('content').querySelectorAll('[data-act="reply-msg"]').forEach(b => b.addEventListener('click', () => repondreMessage(b.dataset.client)));
+  $('content').querySelectorAll('[data-act="toggle-statut"]').forEach(b => b.addEventListener('click', () => basculerStatutCommande(b.dataset.id)));
 }
 
 // === LISTE DE COURSES PAR COMMANDE (admin) ===
 function fmtN(n) { return n % 1 === 0 ? n : parseFloat(n.toFixed(2)); }
 
+// Unité effective d'un lien recette-ingrédient : celle propre à la recette (ri.unite)
+// si renseignée, sinon l'unité par défaut de l'ingrédient.
+function riUnite(ri, ing) {
+  const l = ri && ri.unite;
+  if (l != null && l !== '' && l !== 'Unité par défaut') return l;
+  const d = ing && ing.unite_par_defaut;
+  return (d && d !== 'Unité par défaut') ? d : '';
+}
+
 function buildCoursesAdmin(platIds, portions) {
   const p = portions || 4;
   const rayons = {};
   platIds.forEach(pid => {
+    const _recF = getRecette(pid);
+    const _mult = (_recF && _recF.quantite_fixe) ? 1 : p; // recette à quantités fixes : ne pas multiplier par les portions
     const ris = DATA.ri.filter(ri => ri.recette_id === pid);
     ris.forEach(ri => {
       const ing = DATA.ingredients.find(i => i.id === ri.ingredient_id);
       if (!ing) return;
       const ray = ing.rayon || 'Autres';
-      const u = ing.unite_par_defaut && ing.unite_par_defaut !== 'Unité par défaut' ? ing.unite_par_defaut : '';
-      const qte = (ri.quantite_par_portion || 0) * p;
+      const u = riUnite(ri, ing);
+      const qte = (ri.quantite_par_portion || 0) * _mult;
       if (!rayons[ray]) rayons[ray] = {};
-      if (!rayons[ray][ing.nom]) rayons[ray][ing.nom] = { qte: 0, u };
-      rayons[ray][ing.nom].qte += qte;
+      // Meme ingredient dans deux unites differentes (unite par recette) -> lignes separees
+      let key = ing.nom;
+      if (rayons[ray][key] && rayons[ray][key].u !== u) key = ing.nom + ' (' + u + ')';
+      if (!rayons[ray][key]) rayons[ray][key] = { qte: 0, u };
+      rayons[ray][key].qte += qte;
     });
   });
   return Object.entries(rayons).sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+async function basculerStatutCommande(cmdId) {
+  const cmd = DATA.commandes.find(c => c.id === cmdId);
+  if (!cmd) return;
+  const oldStatut = cmd.statut || 'En attente de paiement';
+  const next = oldStatut === 'Confirmée' ? 'En attente de paiement' : 'Confirmée';
+  try { await writeVerified(() => sb.from('commandes').update({ statut: next }).eq('id', cmdId).select('id')); } catch (e) { toast('⚠️ ' + msgErr(e)); return; }
+  cmd.statut = next;
+  // Notif cliente uniquement au passage en Confirmée
+  if (next === 'Confirmée' && oldStatut !== 'Confirmée' && cmd.client_id) {
+    try {
+      const dt = cmd.semaine_du ? new Date(cmd.semaine_du + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }) : '';
+      await sb.from('notifications').insert({
+        recipient_id: cmd.client_id,
+        title: 'Commande confirmée 🎉',
+        body: `Votre commande de la semaine du ${dt} est validée par ${getCurrentEntreprise().nom_contact || 'votre cuisinière'}.`
+      });
+    } catch (e) { /* silent */ }
+  }
+  toast(next === 'Confirmée' ? '✓ Commande confirmée' : '⏳ Remise à confirmer');
+  renderPlanning();
+}
+
+function repondreMessage(clientId) {
+  if (!clientId) return;
+  const cli = getClient(clientId);
+  const cliNom = cli ? (cli.nom || 'la cliente') : 'la cliente';
+  const pop = document.createElement('div');
+  pop.id = 'popReply';
+  pop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:999;display:flex;align-items:center;justify-content:center;padding:20px';
+  pop.innerHTML = `<div style="background:var(--wh);border-radius:18px;max-width:480px;width:100%;display:flex;flex-direction:column;overflow:hidden">
+    <div style="padding:20px 24px;border-bottom:1px solid var(--bgd);display:flex;align-items:center;justify-content:space-between;gap:14px">
+      <div style="font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:600;color:var(--v2)">↩️ Répondre à ${escapeHtml(cliNom)}</div>
+      <button class="btn btn-ghost btn-sm" id="popReplyClose">✕</button>
+    </div>
+    <div style="padding:18px 22px">
+      <div style="font-size:12px;color:var(--txl);margin-bottom:8px">Votre réponse sera envoyée à ${escapeHtml(cliNom)} dans ses notifications (cloche 🔔 de l'app).</div>
+      <textarea id="popReplyTxt" rows="4" placeholder="Votre réponse..." style="width:100%;border:1px solid var(--bgd);border-radius:10px;padding:11px;font-family:'DM Sans',sans-serif;font-size:14px;background:#fff;color:var(--tx);resize:vertical"></textarea>
+    </div>
+    <div style="padding:14px 22px;border-top:1px solid var(--bgd);display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-ghost" id="popReplyCancel">Annuler</button>
+      <button class="btn btn-primary" id="popReplySend">📨 Envoyer</button>
+    </div>
+  </div>`;
+  document.body.appendChild(pop);
+  const close = () => pop.remove();
+  $('popReplyClose').addEventListener('click', close);
+  $('popReplyCancel').addEventListener('click', close);
+  pop.addEventListener('click', (e) => { if (e.target === pop) close(); });
+  setTimeout(() => $('popReplyTxt').focus(), 50);
+  $('popReplySend').addEventListener('click', async () => {
+    const txt = $('popReplyTxt').value.trim();
+    if (!txt) { $('popReplyTxt').focus(); return; }
+    const btn = $('popReplySend'); btn.disabled = true; btn.textContent = 'Envoi...';
+    const ent = getCurrentEntreprise();
+    try {
+      await writeVerified(() => sb.from('notifications').insert({
+        recipient_id: clientId,
+        title: `💬 Réponse de ${ent?.nom_contact || ent?.nom || 'votre cuisinière'}`,
+        body: txt
+      }).select('id'));
+    } catch (error) { toast('⚠️ ' + msgErr(error)); btn.disabled = false; btn.textContent = '📨 Envoyer'; return; }
+    close();
+    toast('Réponse envoyée à ' + cliNom);
+  });
 }
 
 function voirCoursesCommande(cmdId) {
   const cmd = DATA.commandes.find(c => c.id === cmdId);
   if (!cmd) return;
   const cli = getClient(cmd.client_id) || {};
-  const platIds = [cmd.plat_1_id, cmd.plat_2_id, cmd.plat_3_id, cmd.plat_4_id, cmd.plat_5_id].filter(Boolean);
+  const platIds = cmdPlatIds(cmd);
   const portions = cmd.nombre_portions || 4;
   const sorted = buildCoursesAdmin(platIds, portions);
   const semLabel = cmd.semaine_du ? new Date(cmd.semaine_du + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
@@ -449,7 +627,7 @@ function voirCoursesCommande(cmdId) {
     </div>
     <div style="padding:14px 22px;border-top:1px solid var(--bgd);display:flex;gap:10px;justify-content:flex-end">
       <button class="btn btn-ghost" id="popCoursesReset">Décocher tout</button>
-      <button class="btn btn-pri" id="popCoursesPrint">🖨️ Imprimer</button>
+      <button class="btn btn-primary" id="popCoursesPrint">🖨️ Imprimer</button>
     </div>
   </div>`;
   document.body.appendChild(pop);
@@ -519,8 +697,7 @@ function imprimerCoursesAdmin(cmd, sorted, portions) {
 
 async function supprimerCommande(id) {
   if (!confirm('Supprimer cette commande ?')) return;
-  const { error } = await sb.from('commandes').delete().eq('id', id);
-  if (error) { toast('Erreur: ' + error.message); return; }
+  try { await writeVerified(() => sb.from('commandes').delete().eq('id', id).select('id')); } catch (e) { toast('⚠️ ' + msgErr(e)); return; }
   DATA.commandes = DATA.commandes.filter(c => c.id !== id);
   toast('🗑️ Commande supprimee'); renderPlanning();
 }
@@ -529,8 +706,7 @@ async function assignerSalarie(cmdId, salId) {
   const cmd = DATA.commandes.find(x => x.id === cmdId);
   const oldSalId = cmd?.assigne_a_id;
   const payload = { assigne_a_id: salId || null };
-  const { error } = await sb.from('commandes').update(payload).eq('id', cmdId);
-  if (error) { toast('Erreur: ' + error.message); return; }
+  try { await writeVerified(() => sb.from('commandes').update(payload).eq('id', cmdId).select('id')); } catch (e) { toast('⚠️ ' + msgErr(e)); return; }
   if (cmd) cmd.assigne_a_id = salId || null;
   // Notif partenaire si nouvelle assignation
   if (salId && salId !== oldSalId) {
@@ -562,14 +738,15 @@ function editerCommande(id) {
   majSelectCreneau(cmd.creneau || '');
 
   const salSel = $('cmdSalarie');
-  salSel.innerHTML = `<option value="">Non assigne</option>` +
+  salSel.innerHTML = `<option value="">${escapeHtml((getCurrentEntreprise() || {}).nom_marque || 'Mon compte')}</option>` +
     DATA.salaries.map(s => `<option value="${s.id}">${escapeHtml(s.nom)}</option>`).join('');
   salSel.value = cmd.assigne_a_id || '';
+  const salFg = salSel.closest('.fg'); if (salFg) salFg.style.display = DATA.salaries.length ? '' : 'none';
 
   $('cmdPortions').value = cmd.nombre_portions || 4;
   $('cmdStatut').value = cmd.statut || 'En attente de paiement';
 
-  const selPlatIds = [cmd.plat_1_id, cmd.plat_2_id, cmd.plat_3_id, cmd.plat_4_id, cmd.plat_5_id].filter(Boolean);
+  const selPlatIds = cmdPlatIds(cmd);
   const platsActifs = DATA.recettes.filter(r => getEtat(r) === 'actif');
   $('platSelectGrid').innerHTML = platsActifs.map(r => {
     const sel = selPlatIds.includes(r.id) ? ' sel' : '';
@@ -579,8 +756,8 @@ function editerCommande(id) {
     el.addEventListener('click', () => {
       if (el.classList.contains('sel')) { el.classList.remove('sel'); }
       else {
-        if ($('platSelectGrid').querySelectorAll('.plat-opt.sel').length >= 5) {
-          toast('⚠️ Maximum 5 plats'); return;
+        if ($('platSelectGrid').querySelectorAll('.plat-opt.sel').length >= 12) {
+          toast('⚠️ Maximum 12 plats'); return;
         }
         el.classList.add('sel');
       }
@@ -629,10 +806,10 @@ async function saveCommande() {
     plat_2_id: selIds[1] || null,
     plat_3_id: selIds[2] || null,
     plat_4_id: selIds[3] || null,
-    plat_5_id: selIds[4] || null
+    plat_5_id: selIds[4] || null,
+    items: selIds.map((rid, i) => ({ recette_id: rid, type: (getRecette(rid)?.type_plat || 'plat'), ordre: i }))
   };
-  const { error } = await sb.from('commandes').update(payload).eq('id', id);
-  if (error) { toast('Erreur: ' + error.message); return; }
+  try { await writeVerified(() => sb.from('commandes').update(payload).eq('id', id).select('id')); } catch (e) { toast('⚠️ ' + msgErr(e)); return; }
   if (oldCmd) Object.assign(oldCmd, payload);
 
   // Notif client si confirmation
@@ -660,6 +837,67 @@ async function saveCommande() {
   toast('✅ Commande modifiee'); closeModal('modalCommande'); renderPlanning();
 }
 
+// --- PHOTOS DE MISSION (plats préparés par les cuisinières) ---
+async function voirMissionPhotos(commandeId) {
+  let photos = (DATA.missionPhotos || []).filter(mp => mp.commande_id === commandeId);
+  try { const { data } = await sb.from('mission_photos').select('*').eq('commande_id', commandeId).order('created_at', { ascending: false }); if (data) photos = data; } catch (e) {}
+  const cmd = DATA.commandes.find(c => c.id === commandeId) || {};
+  const cli = getClient(cmd.client_id) || {};
+  const sal = DATA.salaries.find(s => s.id === (photos[0] || {}).salarie_id);
+  const pop = document.createElement('div');
+  pop.className = 'overlay open';
+  pop.style.zIndex = '600';
+  pop.innerHTML = `<div class="modal" style="max-width:660px">
+    <div class="modal-head"><div class="modal-tit">📷 Photos du plat — ${escapeHtml(cli.nom || 'commande')}</div><button class="modal-x" id="mpClose">✕</button></div>
+    <p style="font-size:12px;color:var(--txl);margin-bottom:14px">${photos.length} photo(s)${sal ? ' · envoyées par ' + escapeHtml(sal.nom) : ''}. ⏳ Elles sont supprimées automatiquement <b>14 jours</b> après l'envoi — télécharge-les avant.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:12px">${photos.length ? photos.map((p, i) => `<div style="width:190px">
+      <a href="${escapeAttr(p.url)}" target="_blank" rel="noopener"><img src="${escapeAttr(p.url)}" style="width:190px;height:190px;object-fit:cover;border-radius:10px;border:1px solid var(--bgd)"></a>
+      <button class="btn btn-ghost btn-sm" data-dl="${escapeAttr(p.url)}" data-nom="plat-${escapeAttr((cli.nom || 'commande').replace(/[^a-z0-9]/gi, '-'))}-${i + 1}.jpg" style="width:100%;margin-top:6px">⬇️ Télécharger</button>
+    </div>`).join('') : '<span style="color:var(--txl)">Aucune photo.</span>'}</div>
+    <label style="display:inline-flex;align-items:center;gap:8px;margin-top:16px;background:var(--v2);color:#fff;padding:9px 16px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600">📷 Ajouter une photo<input type="file" accept="image/*" id="mpAdd" style="display:none"></label>
+    <span id="mpAddState" style="font-size:12px;color:var(--txl);margin-left:8px"></span>
+  </div>`;
+  document.body.appendChild(pop);
+  pop.querySelector('#mpClose').addEventListener('click', () => pop.remove());
+  pop.addEventListener('click', (e) => { if (e.target === pop) pop.remove(); });
+  pop.querySelectorAll('[data-dl]').forEach(b => b.addEventListener('click', async () => {
+    try { const r = await fetch(b.dataset.dl); const blob = await r.blob(); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = b.dataset.nom; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href); }
+    catch (e) { toast('⚠️ ' + msgErr(e)); }
+  }));
+  const mpAdd = pop.querySelector('#mpAdd');
+  if (mpAdd) mpAdd.addEventListener('change', async (ev) => {
+    const f = ev.target.files && ev.target.files[0]; ev.target.value = '';
+    if (!f) return;
+    const ok = await uploadMissionPhotoAdmin(f, commandeId, pop.querySelector('#mpAddState'));
+    if (ok) { pop.remove(); voirMissionPhotos(commandeId); }
+  });
+}
+
+// Upload d'une photo de mission par la tête de réseau (admin) pour SES propres missions.
+// salarie_id = null (c'est l'admin, pas une cuisinière). RLS mp_staff_all autorise l'admin.
+async function uploadMissionPhotoAdmin(file, commandeId, stateEl) {
+  if (stateEl) stateEl.textContent = '⏳ Envoi…';
+  try {
+    let blob = await compressImage(file);
+    const heic = /heic|heif/i.test(file.type || '') || /\.hei[cf]$/i.test(file.name || '');
+    if (!blob && heic) throw new Error('Photo iPhone illisible, réessaie ou choisis un JPG.');
+    if (!blob) blob = file;
+    const path = `${CURRENT_ENTREPRISE_ID}/mission-${commandeId}-${Date.now()}.jpg`;
+    const { error: upErr } = await sb.storage.from(STORAGE_BUCKET).upload(path, blob, { upsert: false, contentType: 'image/jpeg' });
+    if (upErr) throw upErr;
+    const { data: pub } = sb.storage.from(STORAGE_BUCKET).getPublicUrl(path);
+    let row;
+    try {
+      [row] = await writeVerified(() => sb.from('mission_photos').insert({ entreprise_id: CURRENT_ENTREPRISE_ID, commande_id: commandeId, salarie_id: null, url: pub.publicUrl, path }).select('*'));
+    } catch (insErr) {
+      try { await sb.storage.from(STORAGE_BUCKET).remove([path]); } catch (_) {}
+      throw insErr;
+    }
+    if (row) DATA.missionPhotos.push(row);
+    return true;
+  } catch (e) { toast('⚠️ ' + msgErr(e)); if (stateEl) stateEl.textContent = ''; return false; }
+}
+
 // --- VOIR INGREDIENTS ---
 function voirIngredients(recetteId, portions) {
   const rec = getRecette(recetteId); if (!rec) return;
@@ -667,8 +905,8 @@ function voirIngredients(recetteId, portions) {
   const ingsHtml = ings.length ? `<div style="display:flex;flex-direction:column;gap:0">${ings.map(ri => {
     const ing = DATA.ingredients.find(i => i.id === ri.ingredient_id);
     if (!ing) return '';
-    const u = ing.unite_par_defaut && ing.unite_par_defaut !== 'Unité par défaut' ? ing.unite_par_defaut : '';
-    const q = (ri.quantite_par_portion || 0) * portions;
+    const u = riUnite(ri, ing);
+    const q = (ri.quantite_par_portion || 0) * (rec.quantite_fixe ? 1 : portions);
     const total = Math.round(q * 10) / 10;
     return `<div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--bgd);font-size:13px;align-items:center">
       <span style="color:var(--tx)">${escapeHtml(ing.nom)}</span>
@@ -713,9 +951,9 @@ function renderPlanningMois() {
     const dy = dateObj.getDay();
     const mond = new Date(dateObj); mond.setDate(dateObj.getDate() - ((dy + 6) % 7));
     const mondayStr = `${mond.getFullYear()}-${String(mond.getMonth() + 1).padStart(2, '0')}-${String(mond.getDate()).padStart(2, '0')}`;
-    return DATA.commandes.filter(c => {
+    return filterAssigne(DATA.commandes.filter(c => {
       return (c.semaine_du || '').startsWith(mondayStr) && (c.creneau || '').toLowerCase().includes(dowFr.toLowerCase());
-    });
+    }));
   }
   const grid = cells.map(({ date, otherMonth }) => {
     const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -732,6 +970,7 @@ function renderPlanningMois() {
   }).join('');
   showContent(`<div class="card">
     ${planningSwitcher()}
+    ${planningAssigneBar()}
     <div class="card-head">
       <div class="card-tit">🗓️ ${moisNoms[m]} ${y}</div>
       <div style="display:flex;gap:8px">
@@ -746,6 +985,7 @@ function renderPlanningMois() {
     </div>
   </div>`);
   bindPlanningSwitcher();
+  bindPlanningAssigne();
   $('prevMois').addEventListener('click', () => { calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; } renderPlanningMois(); });
   $('nextMois').addEventListener('click', () => { calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; } renderPlanningMois(); });
   $('todayMois').addEventListener('click', () => { const n = new Date(); calYear = n.getFullYear(); calMonth = n.getMonth(); renderPlanningMois(); });
@@ -754,11 +994,11 @@ function renderPlanningMois() {
 
 function voirJourCal(iso, dow) {
   const dowFr = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'][dow];
-  const dateObj = new Date(iso);
+  const dateObj = new Date(iso + 'T00:00:00');
   const dy = dateObj.getDay();
   const mond = new Date(dateObj); mond.setDate(dateObj.getDate() - ((dy + 6) % 7));
   const mondayStr = `${mond.getFullYear()}-${String(mond.getMonth() + 1).padStart(2, '0')}-${String(mond.getDate()).padStart(2, '0')}`;
-  const cmds = DATA.commandes.filter(c => (c.semaine_du || '').startsWith(mondayStr) && (c.creneau || '').toLowerCase().includes(dowFr.toLowerCase()));
+  const cmds = filterAssigne(DATA.commandes.filter(c => (c.semaine_du || '').startsWith(mondayStr) && (c.creneau || '').toLowerCase().includes(dowFr.toLowerCase())));
   const dateLabel = dateObj.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
   $('modalCalTit').textContent = dateLabel.charAt(0).toUpperCase() + dateLabel.slice(1);
   $('modalCalBody').innerHTML = cmds.length ? cmds.map(c => {
@@ -769,13 +1009,14 @@ function voirJourCal(iso, dow) {
       <div style="font-weight:600;margin-bottom:4px">${escapeHtml((cli && cli.nom) || '–')}${(() => { const f = DATA.forfaits.find(x => x.id === c.forfait_id); const needs = f?.inclut_courses || (cli && cli.courses_par_cuisiniere); return needs ? ' <span style="background:#fff3cd;color:#8a6a1a;border:1px solid #f6e0a3;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:500">🛒 Courses</span>' : ''; })()}</div>
       <div style="font-size:12px;color:var(--txl);margin-bottom:8px">📅 ${escapeHtml(c.creneau || '–')} · ${c.nombre_portions || 4} portions · ${escapeHtml(c.statut || 'En attente')}${(() => { const f = DATA.forfaits.find(x => x.id === c.forfait_id); return f ? ` · 📦 ${escapeHtml(f.nom)} (${f.prix}€)` : (c.montant ? ` · 💶 ${c.montant}€` : ''); })()}</div>
       <div style="display:flex;flex-wrap:wrap;gap:5px">${plats.map(p => `<span class="plat-chip">${escapeHtml(p.nom_du_plat)}</span>`).join('')}</div>
-      ${sal ? `<div style="font-size:12px;color:var(--txl);margin-top:8px">👷 ${escapeHtml(sal.nom)}</div>` : ''}
+      ${sal ? `<div style="font-size:12px;color:var(--txl);margin-top:8px">👨‍🍳 ${escapeHtml(sal.nom)}</div>` : ''}
     </div>`;
   }).join('') : `<p style="color:var(--txl);text-align:center;padding:20px">Aucune commande ce jour</p>`;
   openModal('modalCalJour');
 }
 
 // --- STATS / DASHBOARD ---
+let statsRecapMois = null; // mois selectionne pour le recap mensuel par cuisiniere (YYYY-MM)
 function renderStats() {
   const now = new Date();
   const thisMonthIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -788,9 +1029,13 @@ function renderStats() {
   const isConfirme = (cmd) => cmd.statut === 'Confirmée';
   const isAttente = (cmd) => cmd.statut === 'En attente de paiement';
 
+  // Reseau : les KPI + top clientes reflètent l'activite de la TETE (commandes non assignees a une cuisiniere).
+  // En solo, tout est non-assigne => identique a avant.
+  const myCmds = DATA.commandes.filter(c => !c.assigne_a_id);
+
   // KPIs
-  const cmdConfMois = DATA.commandes.filter(c => inMonth(c, thisMonthIso) && isConfirme(c));
-  const cmdConfPrev = DATA.commandes.filter(c => inMonth(c, prevMonthIso) && isConfirme(c));
+  const cmdConfMois = myCmds.filter(c => inMonth(c, thisMonthIso) && isConfirme(c));
+  const cmdConfPrev = myCmds.filter(c => inMonth(c, prevMonthIso) && isConfirme(c));
   const sumMontant = (cmds) => cmds.reduce((sum, c) => sum + Number(c.montant ?? PRIX_PRESTATION), 0);
   const caMois = sumMontant(cmdConfMois);
   const caPrev = sumMontant(cmdConfPrev);
@@ -803,17 +1048,19 @@ function renderStats() {
   }
   const deltaColor = deltaPct > 0 ? '#2e7d32' : deltaPct < 0 ? '#c62828' : 'var(--txl)';
 
-  const cmdMois = DATA.commandes.filter(c => inMonth(c, thisMonthIso));
-  const cmdAFacturer = DATA.commandes.filter(isAttente);
-  const cmdSemaine = DATA.commandes.filter(c => (c.semaine_du || '').startsWith(thisMon));
-  const cmdSemaineProchaine = DATA.commandes.filter(c => (c.semaine_du || '').startsWith(nextMon));
-  const portionsSemaine = cmdSemaine.reduce((a, c) => a + (c.nombre_portions || 4) * 5, 0);
-  const portionsSemaineProchaine = cmdSemaineProchaine.reduce((a, c) => a + (c.nombre_portions || 4) * 5, 0);
+  const cmdMois = myCmds.filter(c => inMonth(c, thisMonthIso));
+  const cmdAFacturer = myCmds.filter(isAttente);
+  const cmdSemaine = myCmds.filter(c => (c.semaine_du || '').startsWith(thisMon));
+  const cmdSemaineProchaine = myCmds.filter(c => (c.semaine_du || '').startsWith(nextMon));
+  const platsSemaine = cmdSemaine.reduce((a, c) => a + cmdPlatIds(c).length, 0);
+  const platsSemaineProchaine = cmdSemaineProchaine.reduce((a, c) => a + cmdPlatIds(c).length, 0);
+  const portionsSemaine = cmdSemaine.reduce((a, c) => a + (c.nombre_portions || 4) * cmdPlatIds(c).length, 0);
+  const portionsSemaineProchaine = cmdSemaineProchaine.reduce((a, c) => a + (c.nombre_portions || 4) * cmdPlatIds(c).length, 0);
 
   // Top 5 plats
   const platCount = {};
   DATA.commandes.forEach(c => {
-    [c.plat_1_id, c.plat_2_id, c.plat_3_id, c.plat_4_id, c.plat_5_id].forEach(id => {
+    cmdPlatIds(c).forEach(id => {
       if (!id) return;
       platCount[id] = (platCount[id] || 0) + 1;
     });
@@ -822,9 +1069,9 @@ function renderStats() {
     .map(([id, n]) => ({ rec: getRecette(id), n }))
     .filter(x => x.rec);
 
-  // Top 3 clientes (toutes commandes confondues) — count + ca
+  // Top 3 clientes de la TETE (uniquement ses propres commandes)
   const clientStats = {};
-  DATA.commandes.forEach(c => {
+  myCmds.forEach(c => {
     if (!c.client_id) return;
     if (!clientStats[c.client_id]) clientStats[c.client_id] = { n: 0, ca: 0 };
     clientStats[c.client_id].n += 1;
@@ -834,12 +1081,39 @@ function renderStats() {
     .map(([id, s]) => ({ cli: getClient(id), n: s.n, ca: s.ca }))
     .filter(x => x.cli);
 
+  // Top partenaires les plus actifs (reseau uniquement) — commandes assignees a chaque cuisiniere
+  const partStats = {};
+  DATA.commandes.forEach(c => {
+    if (!c.assigne_a_id) return;
+    if (!partStats[c.assigne_a_id]) partStats[c.assigne_a_id] = { n: 0, ca: 0 };
+    partStats[c.assigne_a_id].n += 1;
+    partStats[c.assigne_a_id].ca += Number(c.montant ?? PRIX_PRESTATION);
+  });
+  const topPartenaires = Object.entries(partStats).sort((a, b) => b[1].n - a[1].n).slice(0, 5)
+    .map(([id, s]) => ({ sal: getSalarie(id), n: s.n, ca: s.ca }))
+    .filter(x => x.sal);
+
+  // Recap mensuel par cuisiniere (aide a la declaration CESU) — reseau uniquement
+  const recapMois = statsRecapMois || thisMonthIso;
+  const recapMoisOptions = [];
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    recapMoisOptions.push({ ym, label: d.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) });
+  }
+  const recapCuisiniers = [{ id: null, nom: (getCurrentEntreprise() || {}).nom_marque || 'Mon compte' }, ...DATA.salaries.map(s => ({ id: s.id, nom: s.nom || '–' }))];
+  const recapRows = recapCuisiniers.map(cui => {
+    const n = DATA.commandes.filter(c => (cui.id ? c.assigne_a_id === cui.id : !c.assigne_a_id) && inMonth(c, recapMois)).length;
+    return { nom: cui.nom, n };
+  }).sort((a, b) => b.n - a.n);
+  const recapTotal = recapRows.reduce((a, r) => a + r.n, 0);
+
   // Mini bar chart CA 6 derniers mois
   const monthsBars = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const ca = sumMontant(DATA.commandes.filter(c => inMonth(c, ym) && isConfirme(c)));
+    const ca = sumMontant(myCmds.filter(c => inMonth(c, ym) && isConfirme(c)));
     monthsBars.push({ label: d.toLocaleDateString('fr-FR', { month: 'short' }), ca });
   }
   const maxCa = Math.max(1, ...monthsBars.map(m => m.ca));
@@ -872,8 +1146,8 @@ function renderStats() {
       </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px">
-      <div style="background:var(--bgc);border-radius:14px;padding:18px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-bottom:18px">
+      <div style="background:var(--bgc);border-radius:14px;padding:18px;min-width:0">
         <div style="font-family:'Cormorant Garamond',serif;font-size:17px;font-weight:600;color:var(--v2);margin-bottom:14px">🏆 Top 5 plats commandes</div>
         ${topPlats.length ? topPlats.map((p, i) => `
           <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bgd);font-size:13px">
@@ -882,7 +1156,7 @@ function renderStats() {
             <span style="background:var(--vp);color:var(--v2);padding:2px 9px;border-radius:12px;font-size:11px;font-weight:600">${p.n}x</span>
           </div>`).join('') : '<p style="color:var(--txl);font-size:12px">Aucune commande pour l instant</p>'}
       </div>
-      <div style="background:var(--bgc);border-radius:14px;padding:18px">
+      <div style="background:var(--bgc);border-radius:14px;padding:18px;min-width:0">
         <div style="font-family:'Cormorant Garamond',serif;font-size:17px;font-weight:600;color:var(--v2);margin-bottom:14px">⭐ Top 3 clientes fideles</div>
         ${topClients.length ? topClients.map((c, i) => `
           <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--bgd);font-size:13px">
@@ -893,7 +1167,30 @@ function renderStats() {
             </div>
           </div>`).join('') : '<p style="color:var(--txl);font-size:12px">Aucune cliente fidele pour l instant</p>'}
       </div>
+      ${isReseau() ? `<div style="background:var(--bgc);border-radius:14px;padding:18px;min-width:0">
+        <div style="font-family:'Cormorant Garamond',serif;font-size:17px;font-weight:600;color:var(--v2);margin-bottom:14px">👨‍🍳 Top partenaires actifs</div>
+        ${topPartenaires.length ? topPartenaires.map((p, i) => `
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--bgd);font-size:13px">
+            <span style="background:linear-gradient(135deg,var(--or),#f0a868);color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0">${i + 1}</span>
+            <div style="flex:1"><div style="font-weight:600">${escapeHtml(p.sal.nom || '–')}</div><div style="font-size:11px;color:var(--txl)">${p.n} commande${p.n > 1 ? 's' : ''} · ${p.ca}€ CA</div></div>
+          </div>`).join('') : '<p style="color:var(--txl);font-size:12px">Aucune activité partenaire pour l instant</p>'}
+      </div>` : ''}
     </div>
+
+    ${isReseau() ? `<div style="background:var(--bgc);border-radius:14px;padding:18px;margin-bottom:18px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px">
+        <div style="font-family:'Cormorant Garamond',serif;font-size:17px;font-weight:600;color:var(--v2)">🧾 Récap mensuel par cuisinière</div>
+        <select id="recapMoisSel" style="padding:7px 10px;border:1px solid var(--bgd);border-radius:8px;font-size:13px;background:var(--wh);text-transform:capitalize">
+          ${recapMoisOptions.map(o => `<option value="${o.ym}" ${o.ym === recapMois ? 'selected' : ''}>${o.label}</option>`).join('')}
+        </select>
+      </div>
+      <div style="margin-bottom:12px"></div>
+      ${recapTotal > 0 ? recapRows.map(r => `
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--bgd);font-size:13px">
+          <span style="flex:1;font-weight:${r.n ? '600' : '400'};color:${r.n ? 'var(--tx)' : 'var(--txl)'}">${escapeHtml(r.nom)}</span>
+          <span style="background:${r.n ? 'var(--vp)' : 'transparent'};color:${r.n ? 'var(--v2)' : 'var(--txl)'};padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600">${r.n} commande${r.n > 1 ? 's' : ''}</span>
+        </div>`).join('') + `<div style="display:flex;justify-content:flex-end;padding-top:10px;font-size:13px;font-weight:600;color:var(--v2)">Total : ${recapTotal} commande${recapTotal > 1 ? 's' : ''}</div>` : '<p style="color:var(--txl);font-size:12px">Aucune commande sur ce mois.</p>'}
+    </div>` : ''}
 
     <div id="stats-six-month" style="background:var(--bgc);border-radius:14px;padding:18px;margin-bottom:18px">
       <div style="font-family:'Cormorant Garamond',serif;font-size:17px;font-weight:600;color:var(--v2);margin-bottom:14px">📈 Evolution CA - 6 derniers mois</div>
@@ -915,20 +1212,23 @@ function renderStats() {
         <div>
           <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--txl);margin-bottom:4px">Cette semaine</div>
           <div style="font-size:18px;font-weight:600;color:var(--v2)">${cmdSemaine.length} commande${cmdSemaine.length > 1 ? 's' : ''}</div>
-          <div style="color:var(--txm)">${portionsSemaine} portions au total · ${cmdSemaine.length * 5} plats a cuisiner</div>
+          <div style="color:var(--txm)">${portionsSemaine} portions au total · ${platsSemaine} plats a cuisiner</div>
         </div>
         <div>
           <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--txl);margin-bottom:4px">Semaine prochaine</div>
           <div style="font-size:18px;font-weight:600;color:var(--v2)">${cmdSemaineProchaine.length} commande${cmdSemaineProchaine.length > 1 ? 's' : ''}</div>
-          <div style="color:var(--txm)">${portionsSemaineProchaine} portions au total · ${cmdSemaineProchaine.length * 5} plats a cuisiner</div>
+          <div style="color:var(--txm)">${portionsSemaineProchaine} portions au total · ${platsSemaineProchaine} plats a cuisiner</div>
         </div>
       </div>
     </div>
   </div>`);
+
+  const rms = $('recapMoisSel');
+  if (rms) rms.addEventListener('change', () => { statsRecapMois = rms.value; renderStats(); });
 }
 
 // --- RECETTES ---
-const CATS_FIXED = ['Viande', 'Poisson', 'Végé', 'Poulet', 'Pâtes', 'Cuisine du monde', 'Post partum', 'Sans porc'];
+const CATS_FIXED = ['Viande', 'Poisson', 'Végé', 'Poulet', 'Pâtes', 'Cuisine du monde', 'Post partum', 'Sans porc', 'Sans gluten', 'Sans lactose', 'Sucré', 'Tartes', 'Cakes'];
 let recetteSearch = '';
 let recetteCatFilter = 'all';
 let recetteEtatFilter = 'all';
@@ -979,15 +1279,19 @@ function renderRecettes() {
     const badgeStyle = etat === 'actif' ? 'background:#e8f5e9;color:#2e7d32'
                      : etat === 'a_venir' ? 'background:#fff8e1;color:#f57f17'
                      : etat === 'en_stock' ? 'background:#e8eaf6;color:#3949ab'
+                     : etat === 'en_attente' ? 'background:#fff3e0;color:#e65100'
                      : 'background:#ffebee;color:#c62828';
-    const badgeTxt = etat === 'actif' ? '✓ Actif' : etat === 'a_venir' ? '⏳ A venir' : etat === 'en_stock' ? '📦 En stock' : '✗ Inactif';
+    const badgeTxt = etat === 'actif' ? '✓ Actif' : etat === 'a_venir' ? '⏳ A venir' : etat === 'en_stock' ? '📦 En stock' : etat === 'en_attente' ? '⏳ À valider' : '✗ Inactif';
     return `<div class="rec-card${etat === 'actif' ? '' : ' inactif'}" data-id="${r.id}">
       ${r.photo_url ? `<img src="${escapeHtml(r.photo_url)}" style="width:100%;height:130px;object-fit:cover;display:block">` : `<div class="rec-img">🍽️</div>`}
       <div class="rec-body">
         <div class="rec-nom">${escapeHtml(r.nom_du_plat)}</div>
         <div class="rec-cat">${escapeHtml(catsOf(r).join(', ') || '–')} · ${nbIngs} ingr. · ${r.frigo_en_jours || '?'}j frigo</div>
         <div class="rec-footer">
-          <button data-act="cycle-rec" data-id="${r.id}" data-etat="${etat}" title="Clic pour changer le statut" style="padding:4px 10px;border-radius:16px;font-size:11px;font-weight:500;cursor:pointer;border:none;font-family:'DM Sans',sans-serif;${badgeStyle}">${badgeTxt}</button>
+          ${etat === 'en_attente'
+            ? `<button data-act="valid-rec" data-id="${r.id}" title="Publier cette recette" style="padding:4px 10px;border-radius:16px;font-size:11px;font-weight:600;cursor:pointer;border:none;font-family:'DM Sans',sans-serif;background:#e8f5e9;color:#2e7d32">✅ Valider</button>
+               <button data-act="reject-rec" data-id="${r.id}" title="Refuser" style="padding:4px 10px;border-radius:16px;font-size:11px;font-weight:600;cursor:pointer;border:none;font-family:'DM Sans',sans-serif;background:#ffebee;color:#c62828">✕ Refuser</button>`
+            : `<button data-act="cycle-rec" data-id="${r.id}" data-etat="${etat}" title="Clic pour changer le statut" style="padding:4px 10px;border-radius:16px;font-size:11px;font-weight:500;cursor:pointer;border:none;font-family:'DM Sans',sans-serif;${badgeStyle}">${badgeTxt}</button>`}
           <button class="btn btn-ghost btn-sm" data-act="dup-rec" data-id="${r.id}" title="Dupliquer">📋</button>
           <button class="btn btn-danger btn-sm" data-act="del-rec" data-id="${r.id}">🗑️</button>
         </div>
@@ -999,8 +1303,9 @@ function renderRecettes() {
     ? 'background:var(--vp);border-color:var(--v3);color:var(--v2);font-weight:600'
     : 'background:var(--bgc);border-color:var(--bgd);color:var(--txm)';
   const catChips = ['all', ...CATS_FIXED].map(c => `<button class="rec-cat-chip" data-cat="${escapeHtml(c)}" style="padding:5px 12px;border:1.5px solid;border-radius:16px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:.15s;${chipCss(c === recetteCatFilter)}">${c === 'all' ? 'Toutes' : escapeHtml(c)}</button>`).join('');
-  const allChips = [['all', 'Tous statuts'], ['actif', '✓ Actif'], ['a_venir', '⏳ À venir'], ['en_stock', '📦 En stock'], ['inactif', '✗ Inactif']];
-  const etatChips = (isFounder() ? allChips : allChips.filter(([k]) => k === 'all' || k === 'actif' || k === 'inactif'))
+  const pendingRec = DATA.recettes.filter(r => getEtat(r) === 'en_attente');
+  const allChips = [['all', 'Tous statuts'], ['en_attente', '⏳ À valider'], ['actif', '✓ Actif'], ['a_venir', '⏳ À venir'], ['en_stock', '📦 En stock'], ['inactif', '✗ Inactif']];
+  const etatChips = (isFounder() ? allChips : allChips.filter(([k]) => k === 'all' || (k === 'en_attente' && isReseau()) || k === 'actif' || k === 'a_venir' || k === 'inactif'))
     .map(([v, l]) => `<button class="rec-etat-chip" data-etat="${v}" style="padding:5px 12px;border:1.5px solid;border-radius:16px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:.15s;${chipCss(v === recetteEtatFilter)}">${escapeHtml(l)}</button>`).join('');
 
   showContent(`<div class="card">
@@ -1013,6 +1318,7 @@ function renderRecettes() {
       <div style="display:flex;flex-wrap:wrap;gap:6px">${catChips}</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px">${etatChips}</div>
     </div>
+    ${(isReseau() && pendingRec.length) ? `<div style="background:#fff3e0;border:1px solid #ffcc80;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#e65100;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><span><strong>⏳ ${pendingRec.length} recette(s) proposée(s)</strong> par tes cuisinières — à valider ou refuser.</span><button class="btn btn-ghost btn-sm" id="btnVoirPending">Voir</button></div>` : ''}
     <div class="rec-grid">${recGrid || '<div class="empty"><div class="empty-icon">🍽️</div><div class="empty-txt">Aucune recette ne correspond aux filtres</div></div>'}</div>
   </div>`);
 
@@ -1043,6 +1349,9 @@ function renderRecettes() {
     e.stopPropagation();
     cycleEtatRecette(b.dataset.id, b.dataset.etat);
   }));
+  $('content').querySelectorAll('[data-act="valid-rec"]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); validerRecette(b.dataset.id); }));
+  $('content').querySelectorAll('[data-act="reject-rec"]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); refuserRecette(b.dataset.id); }));
+  { const bp = $('btnVoirPending'); if (bp) bp.addEventListener('click', () => { recetteEtatFilter = 'en_attente'; renderRecettes(); }); }
   $('content').querySelectorAll('[data-act="del-rec"]').forEach(b => b.addEventListener('click', (e) => {
     e.stopPropagation();
     supprimerRecette(b.dataset.id);
@@ -1063,6 +1372,9 @@ function dupliquerRecette(id) {
   $('rRechauffage').value = rec.instructions_rechauffage || '';
   $('rCongelation').value = rec.congelation || '';
   $('rEtat').value = 'actif';
+  if ($('rFour')) $('rFour').checked = !!rec.au_four;
+  if ($('rQtyFixe')) $('rQtyFixe').checked = !!rec.quantite_fixe;
+  if ($('rType')) $('rType').value = rec.type_plat || 'plat';
   $('rPhoto').value = rec.photo_url || '';
   $('rPhotoPreview').innerHTML = rec.photo_url ? `<img src="${escapeHtml(rec.photo_url)}" style="width:100%;height:100%;object-fit:cover">` : '🍽️';
   $('rPhotoNom').textContent = rec.photo_url ? 'Photo dupliquee — modifiable' : 'Aucune photo';
@@ -1076,7 +1388,7 @@ function dupliquerRecette(id) {
       ingId: r.ingredient_id || null,
       nom: ing ? ing.nom : '',
       qte: r.quantite_par_portion || 0,
-      unite: ing && ing.unite_par_defaut !== 'Unité par défaut' ? (ing.unite_par_defaut || '') : '',
+      unite: riUnite(r, ing),
       isNew: true,
       toDelete: false
     };
@@ -1170,6 +1482,7 @@ function renderIngredients() {
   showContent(`<div class="card">
     <div class="card-head">
       <div class="card-tit">🥕 Ingrédients <span>${list.length} / ${DATA.ingredients.length}</span></div>
+      <button class="btn btn-primary" id="btnNewIng">+ Nouvel ingrédient</button>
     </div>
     <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:18px">
       <input type="text" id="ingSearch" placeholder="🔍 Rechercher un ingrédient..." value="${escapeAttr(ingSearch)}" style="padding:9px 14px;border:1.5px solid var(--bgd);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:13px;outline:none;background:var(--wh);color:var(--tx);width:100%">
@@ -1184,29 +1497,31 @@ function renderIngredients() {
     setTimeout(() => { const inp = $('ingSearch'); if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); } }, 0);
   });
   $('content').querySelectorAll('.ing-rayon-chip').forEach(c => c.addEventListener('click', () => { ingRayonFilter = c.dataset.rayon; renderIngredients(); }));
+  { const bn = $('btnNewIng'); if (bn) bn.addEventListener('click', () => editerIngredient(null)); }
   $('content').querySelectorAll('[data-act="edit-ing"]').forEach(b => b.addEventListener('click', () => editerIngredient(b.dataset.id)));
   $('content').querySelectorAll('[data-act="del-ing"]').forEach(b => b.addEventListener('click', () => supprimerIngredient(b.dataset.id)));
 }
 
 function editerIngredient(id) {
-  const ing = DATA.ingredients.find(i => i.id === id); if (!ing) return;
-  const usage = ingUsageCount(id);
+  const ing = id ? DATA.ingredients.find(i => i.id === id) : null;
+  if (id && !ing) return;
+  const usage = id ? ingUsageCount(id) : 0;
   const recsListe = usage > 0 ? ingUsageRecettes(id).slice(0, 8).join(', ') + (usage > 8 ? '…' : '') : '';
   const pop = document.createElement('div');
   pop.className = 'overlay open';
   pop.style.zIndex = '500';
   pop.innerHTML = `<div class="modal" style="max-width:480px">
-    <div class="modal-head"><div class="modal-tit">Modifier l'ingrédient</div></div>
+    <div class="modal-head"><div class="modal-tit">${id ? "Modifier l'ingrédient" : 'Nouvel ingrédient'}</div></div>
     <div class="form-grid" style="grid-template-columns:1fr">
-      <div class="fg"><label>Nom *</label><input id="ingEditNom" type="text" value="${escapeAttr(ing.nom || '')}"></div>
-      <div class="fg"><label>Unité par défaut</label><input id="ingEditUnite" type="text" list="dlUnites" value="${escapeAttr(ing.unite_par_defaut && ing.unite_par_defaut !== 'Unité par défaut' ? ing.unite_par_defaut : '')}" placeholder="g, mL, pièce..."></div>
+      <div class="fg"><label>Nom *</label><input id="ingEditNom" type="text" value="${escapeAttr(ing ? (ing.nom || '') : '')}" placeholder="ex: Carottes"></div>
+      <div class="fg"><label>Unité par défaut</label><input id="ingEditUnite" type="text" list="dlUnites" value="${escapeAttr(ing && ing.unite_par_defaut && ing.unite_par_defaut !== 'Unité par défaut' ? ing.unite_par_defaut : '')}" placeholder="g, mL, pièce..."></div>
       <div class="fg"><label>Rayon (pour la liste de courses)</label>
         <select id="ingEditRayon">
-          ${RAYONS_LIST.map(r => `<option value="${escapeHtml(r)}"${(ing.rayon || 'Autres') === r ? ' selected' : ''}>${escapeHtml(r)}</option>`).join('')}
+          ${RAYONS_LIST.map(r => `<option value="${escapeHtml(r)}"${((ing && ing.rayon) || 'Autres') === r ? ' selected' : ''}>${escapeHtml(r)}</option>`).join('')}
         </select>
       </div>
     </div>
-    <p style="font-size:12px;color:var(--txm);margin-top:8px">${usage > 0 ? `Utilisé dans ${usage} recette${usage > 1 ? 's' : ''} : ${escapeHtml(recsListe)}. Les changements s'appliqueront partout.` : 'Cet ingrédient n\'est utilisé dans aucune recette.'}</p>
+    <p style="font-size:12px;color:var(--txm);margin-top:8px">${id ? (usage > 0 ? `Utilisé dans ${usage} recette${usage > 1 ? 's' : ''} : ${escapeHtml(recsListe)}. Les changements s'appliqueront partout.` : 'Cet ingrédient n\'est utilisé dans aucune recette.') : 'Il sera disponible pour composer tes recettes et tes listes de courses.'}</p>
     <div style="display:flex;gap:10px;margin-top:18px">
       <button id="ingEditOk" class="btn btn-primary" style="flex:1">✓ Enregistrer</button>
       <button id="ingEditCancel" class="btn btn-ghost">Annuler</button>
@@ -1222,16 +1537,26 @@ function editerIngredient(id) {
     const rayon = pop.querySelector('#ingEditRayon').value;
     const btn = pop.querySelector('#ingEditOk'); btn.disabled = true; btn.textContent = '⏳...';
     try {
-      const { error } = await sb.from('ingredients').update({ nom, unite_par_defaut: unite, rayon }).eq('id', id);
-      if (error) throw error;
-      Object.assign(ing, { nom, unite_par_defaut: unite, rayon });
+      if (id) {
+        await writeVerified(() => sb.from('ingredients').update({ nom, unite_par_defaut: unite, rayon }).eq('id', id).select('id'));
+        Object.assign(ing, { nom, unite_par_defaut: unite, rayon });
+        toast('✓ Ingrédient mis à jour');
+      } else {
+        const existe = DATA.ingredients.find(i => (i.nom || '').toLowerCase().trim() === nom.toLowerCase().trim());
+        if (existe) { toast('⚠️ L\'ingrédient « ' + nom + ' » existe déjà.'); btn.disabled = false; btn.textContent = '✓ Enregistrer'; return; }
+        const { data, error } = await sb.from('ingredients').insert({ nom, unite_par_defaut: unite, rayon, entreprise_id: CURRENT_ENTREPRISE_ID }).select().single();
+        if (error) throw error;
+        DATA.ingredients.push(data);
+        toast('✓ Ingrédient créé');
+      }
       pop.remove();
-      toast('✓ Ingrédient mis à jour');
       populateUnitDatalist();
       renderIngredients();
     } catch (e) {
       btn.disabled = false; btn.textContent = '✓ Enregistrer';
-      toast('Erreur : ' + (e.message || e));
+      const msg = String(e.message || e);
+      if (e.code === '23505' || /duplicate key|unique constraint/i.test(msg)) toast('⚠️ L\'ingrédient « ' + nom + ' » existe déjà (recharge la page si tu ne le vois pas).');
+      else toast('⚠️ ' + msgErr(e));
     }
   });
 }
@@ -1241,33 +1566,54 @@ async function supprimerIngredient(id) {
   if (ingUsageCount(id) > 0) { toast('⚠️ Ingrédient utilisé dans des recettes — impossible de supprimer'); return; }
   if (!confirm(`Supprimer l'ingrédient "${ing.nom}" ?`)) return;
   try {
-    const { error } = await sb.from('ingredients').delete().eq('id', id);
-    if (error) throw error;
+    await writeVerified(() => sb.from('ingredients').delete().eq('id', id).select('id'));
     DATA.ingredients = DATA.ingredients.filter(i => i.id !== id);
     toast('🗑️ Ingrédient supprimé');
     renderIngredients();
   } catch (e) {
-    toast('Erreur : ' + (e.message || e));
+    const msg = String(e.message || e);
+    if (e.code === '23503' || /foreign key|violates/i.test(msg)) {
+      toast('⚠️ Cet ingrédient est en fait utilisé dans des recettes. Recharge la page (Ctrl+F5) : les compteurs affichés étaient périmés.');
+    } else {
+      toast('⚠️ ' + msgErr(e));
+    }
   }
 }
 
 async function cycleEtatRecette(id, currentEtat) {
   const cycle = isFounder()
     ? { actif: 'a_venir', a_venir: 'en_stock', en_stock: 'inactif', inactif: 'actif' }
-    : { actif: 'inactif', inactif: 'actif', a_venir: 'actif', en_stock: 'actif' };
+    : { actif: 'a_venir', a_venir: 'inactif', inactif: 'actif', en_stock: 'actif' };
   const next = cycle[currentEtat] || 'actif';
-  const { error } = await sb.from('recettes').update({ etat: next, active: next === 'actif' }).eq('id', id);
-  if (error) { toast('Erreur: ' + error.message); return; }
+  try { await writeVerified(() => sb.from('recettes').update({ etat: next, active: next === 'actif' }).eq('id', id).select('id')); } catch (e) { toast('⚠️ ' + msgErr(e)); return; }
   const r = getRecette(id); if (r) { r.etat = next; r.active = (next === 'actif'); }
   const label = next === 'actif' ? '✓ Actif' : next === 'a_venir' ? '⏳ A venir' : next === 'en_stock' ? '📦 En stock' : '✗ Inactif';
   toast(`Statut: ${label}`);
   renderRecettes();
 }
 
+// Reseau : validation d'une recette proposee par une cuisiniere (etat 'en_attente')
+async function validerRecette(id) {
+  try { await writeVerified(() => sb.from('recettes').update({ etat: 'actif', active: true }).eq('id', id).select('id')); } catch (e) { toast('⚠️ ' + msgErr(e)); return; }
+  const r = getRecette(id); if (r) { r.etat = 'actif'; r.active = true; }
+  toast('✅ Recette validée et publiée');
+  renderRecettes();
+}
+async function refuserRecette(id) {
+  if (!confirm('Refuser et SUPPRIMER définitivement cette recette proposée ?')) return;
+  try {
+    await sb.from('recettes_ingredients').delete().eq('recette_id', id);
+    await writeVerified(() => sb.from('recettes').delete().eq('id', id).select('id'));
+    DATA.recettes = DATA.recettes.filter(r => r.id !== id);
+    if (Array.isArray(DATA.ri)) DATA.ri = DATA.ri.filter(x => x.recette_id !== id);
+    toast('🗑️ Recette refusée et supprimée');
+    renderRecettes();
+  } catch (e) { toast('⚠️ ' + msgErr(e)); }
+}
+
 async function supprimerRecette(id) {
   if (!confirm('Supprimer ce plat ? Cette action est irreversible.')) return;
-  const { error } = await sb.from('recettes').delete().eq('id', id);
-  if (error) { toast('Erreur: ' + error.message); return; }
+  try { await writeVerified(() => sb.from('recettes').delete().eq('id', id).select('id')); } catch (e) { toast('⚠️ ' + msgErr(e)); return; }
   DATA.recettes = DATA.recettes.filter(r => r.id !== id);
   DATA.ri = DATA.ri.filter(r => r.recette_id !== id);
   toast('🗑️ Plat supprime'); renderRecettes();
@@ -1338,6 +1684,9 @@ function nouvelleRecette() {
   renderRCats([]);
   $('rFrigo').value = '5';
   $('rEtat').value = 'actif';
+  if ($('rFour')) $('rFour').checked = false;
+  if ($('rQtyFixe')) $('rQtyFixe').checked = false;
+  if ($('rType')) $('rType').value = 'plat';
   $('modalRecTit').textContent = 'Nouvelle recette';
   ingBuffer = []; renderIngRows(); openModal('modalRecette');
 }
@@ -1352,6 +1701,9 @@ function editerRecette(id) {
   $('rRechauffage').value = rec.instructions_rechauffage || '';
   $('rCongelation').value = rec.congelation || '';
   $('rEtat').value = getEtat(rec);
+  if ($('rFour')) $('rFour').checked = !!rec.au_four;
+  if ($('rQtyFixe')) $('rQtyFixe').checked = !!rec.quantite_fixe;
+  if ($('rType')) $('rType').value = rec.type_plat || 'plat';
   $('modalRecTit').textContent = 'Modifier · ' + (rec.nom_du_plat || 'recette');
   $('rPhoto').value = rec.photo_url || '';
   $('rPhotoPreview').innerHTML = rec.photo_url ? `<img src="${escapeHtml(rec.photo_url)}" style="width:100%;height:100%;object-fit:cover">` : '🍽️';
@@ -1364,7 +1716,7 @@ function editerRecette(id) {
       id: r.id, ingId: r.ingredient_id || null,
       nom: ing ? ing.nom : '',
       qte: r.quantite_par_portion || 0,
-      unite: ing && ing.unite_par_defaut !== 'Unité par défaut' ? (ing.unite_par_defaut || '') : '',
+      unite: riUnite(r, ing),
       isNew: false, toDelete: false
     };
   });
@@ -1373,17 +1725,44 @@ function editerRecette(id) {
 
 function uploadPhoto() { $('rPhotoFile').click(); }
 
+// Charge a la demande (une seule fois) la librairie de conversion HEIC -> JPEG.
+let _heicLibPromise = null;
+function loadHeicLib() {
+  if (window.heic2any) return Promise.resolve();
+  if (!_heicLibPromise) {
+    _heicLibPromise = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';
+      s.onload = resolve;
+      s.onerror = () => reject(new Error('heic-lib-fail'));
+      document.head.appendChild(s);
+    });
+  }
+  return _heicLibPromise;
+}
+
 // Compresse une image : max 1200px de large, qualite JPEG 82%.
+// Les photos iPhone (HEIC/HEIF) sont d'abord converties en JPEG pour etre affichables partout.
 // Retourne un Blob compresse, ou null si on ne peut pas / pas la peine de compresser.
 async function compressImage(file, maxWidth = 1200, quality = 0.82) {
-  if (!file.type || !file.type.startsWith('image/')) return null;
-  // HEIC/HEIF: la plupart des navigateurs ne savent pas les decoder via <img>
-  if (/heic|heif/i.test(file.type)) return null;
-  // Deja petit ? pas la peine
-  if (file.size < 200 * 1024) return null;
+  const isHeic = /heic|heif/i.test(file.type || '') || /\.hei[cf]$/i.test(file.name || '');
+  let workBlob = file;
+  if (isHeic) {
+    try {
+      await loadHeicLib();
+      const out = await window.heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 });
+      workBlob = Array.isArray(out) ? out[0] : out;
+    } catch (e) {
+      return null; // conversion impossible -> l'appelant gere le repli
+    }
+  } else {
+    if (!file.type || !file.type.startsWith('image/')) return null;
+    // Deja petit ? pas la peine
+    if (file.size < 200 * 1024) return null;
+  }
 
   try {
-    const url = URL.createObjectURL(file);
+    const url = URL.createObjectURL(workBlob);
     const img = await new Promise((resolve, reject) => {
       const i = new Image();
       i.onload = () => resolve(i);
@@ -1409,6 +1788,12 @@ async function handlePhotoFile(input) {
   nom.textContent = 'Compression en cours...';
   try {
     const compressed = await compressImage(file);
+    const heic = /heic|heif/i.test(file.type || '') || /\.hei[cf]$/i.test(file.name || '');
+    if (!compressed && heic) {
+      toast('❌ Photo iPhone illisible, réessaie ou choisis un JPG');
+      nom.textContent = 'Annulé'; btn.textContent = '📷 Changer la photo'; btn.disabled = false;
+      return;
+    }
     const blob = compressed || file;
     const isJpeg = !!compressed;
     const ext = isJpeg ? 'jpg' : ((file.name.split('.').pop() || 'jpg').toLowerCase());
@@ -1435,7 +1820,7 @@ async function handlePhotoFile(input) {
       toast('✅ Photo uploadee');
     }
   } catch (e) {
-    toast('Erreur upload: ' + (e.message || e));
+    toast('⚠️ Échec de l\'envoi. ' + msgErr(e));
     nom.textContent = 'Erreur';
   }
   btn.textContent = '📷 Changer la photo'; btn.disabled = false;
@@ -1498,7 +1883,10 @@ async function saveRecette() {
 
   try {
     const photoUrl = ($('rPhoto').value || '').trim();
-    const etat = $('rEtat').value;
+    let etat = $('rEtat').value;
+    // Édition d'une recette proposée par une cuisinière : elle RESTE « à valider »
+    // (l'édition ne doit pas la publier par accident). Publication via le bouton « ✓ Valider ».
+    if (id) { const _o = getRecette(id); if (_o && getEtat(_o) === 'en_attente') etat = 'en_attente'; }
     const cats = getRCats();
     const payload = {
       nom_du_plat: nom,
@@ -1508,14 +1896,16 @@ async function saveRecette() {
       instructions_preparation: $('rPrep').value,
       instructions_rechauffage: $('rRechauffage').value,
       congelation: $('rCongelation').value,
+      au_four: $('rFour') ? $('rFour').checked : false,
+      quantite_fixe: $('rQtyFixe') ? $('rQtyFixe').checked : false,
+      type_plat: $('rType') ? $('rType').value : 'plat',
       photo_url: photoUrl || null,
       etat,
       active: etat === 'actif'
     };
     let recId = id;
     if (id) {
-      const { error } = await sb.from('recettes').update(payload).eq('id', id);
-      if (error) throw error;
+      await writeVerified(() => sb.from('recettes').update(payload).eq('id', id).select('id'));
       const r = getRecette(id); if (r) Object.assign(r, payload);
     } else {
       const { data, error } = await sb.from('recettes').insert({ ...payload, entreprise_id: CURRENT_ENTREPRISE_ID }).select().single();
@@ -1524,12 +1914,14 @@ async function saveRecette() {
       recId = data.id;
     }
 
-    // Sync ingredients
+    // Sync ingredients — via writeVerified : si la session a expiré pendant une longue
+    // session d'édition, le token est rafraîchi et l'écriture rejouée automatiquement
+    // (sinon PostgREST renvoie 0 ligne sans erreur = perte silencieuse du travail).
     let ordre = 0;
     for (const ing of ingBuffer) {
       ordre++;
       if (ing.toDelete && ing.id) {
-        await sb.from('recettes_ingredients').delete().eq('id', ing.id);
+        await writeVerified(() => sb.from('recettes_ingredients').delete().eq('id', ing.id).select('id'));
         DATA.ri = DATA.ri.filter(r => r.id !== ing.id);
         continue;
       }
@@ -1540,20 +1932,18 @@ async function saveRecette() {
         if (found) ingId = found.id;
         else {
           const rayon = rayonsMap.get(ing.nom.toLowerCase().trim()) || null;
-          const { data, error } = await sb.from('ingredients').insert({ nom: ing.nom.trim(), unite_par_defaut: ing.unite || null, rayon, entreprise_id: CURRENT_ENTREPRISE_ID }).select().single();
-          if (!error && data) { DATA.ingredients.push(data); ingId = data.id; }
+          const [row] = await writeVerified(() => sb.from('ingredients').insert({ nom: ing.nom.trim(), unite_par_defaut: ing.unite || null, rayon, entreprise_id: CURRENT_ENTREPRISE_ID }).select('*'));
+          DATA.ingredients.push(row); ingId = row.id;
         }
       }
       if (!ingId) continue;
       if (ing.isNew) {
-        const { data, error } = await sb.from('recettes_ingredients').insert({ recette_id: recId, ingredient_id: ingId, quantite_par_portion: ing.qte || 0, ordre }).select().single();
-        if (!error && data) DATA.ri.push(data);
+        const [row] = await writeVerified(() => sb.from('recettes_ingredients').insert({ recette_id: recId, ingredient_id: ingId, quantite_par_portion: ing.qte || 0, ordre, unite: ing.unite || null }).select('*'));
+        DATA.ri.push(row);
       } else if (ing.id) {
-        const { error } = await sb.from('recettes_ingredients').update({ ingredient_id: ingId, quantite_par_portion: ing.qte || 0, ordre }).eq('id', ing.id);
-        if (!error) {
-          const r = DATA.ri.find(x => x.id === ing.id);
-          if (r) Object.assign(r, { ingredient_id: ingId, quantite_par_portion: ing.qte || 0, ordre });
-        }
+        await writeVerified(() => sb.from('recettes_ingredients').update({ ingredient_id: ingId, quantite_par_portion: ing.qte || 0, ordre, unite: ing.unite || null }).eq('id', ing.id).select('id'));
+        const r = DATA.ri.find(x => x.id === ing.id);
+        if (r) Object.assign(r, { ingredient_id: ingId, quantite_par_portion: ing.qte || 0, ordre, unite: ing.unite || null });
       }
     }
     populateUnitDatalist(); // mise a jour du datalist si nouvelles unites
@@ -1562,7 +1952,7 @@ async function saveRecette() {
     closeModal('modalRecette');
     renderRecettes();
   } catch (e) {
-    toast('Erreur: ' + (e.message || e));
+    toast('⚠️ ' + msgErr(e));
   } finally {
     btn.disabled = false;
     btn.textContent = originalBtnText;
@@ -1576,11 +1966,11 @@ function renderClients() {
   const rows = DATA.clients.map(c => {
     const initials = (c.nom || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
     return `<tr>
-      <td><div style="display:flex;align-items:center;gap:10px"><div class="tbl-avatar">${escapeHtml(initials)}</div><div><div style="font-weight:600">${escapeHtml(c.nom || '–')}</div><div style="font-size:11px;color:var(--txl)">${escapeHtml(c.email || '')}</div></div></div></td>
-      <td>${escapeHtml(c.telephone || '–')}</td>
-      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(c.adresse || '–')}</td>
-      <td>${escapeHtml(c.notes || '–')}</td>
-      <td style="display:flex;gap:6px"><button class="btn btn-ghost btn-sm" data-act="edit-cli" data-id="${c.id}">✏️ Modifier</button><button class="btn btn-danger btn-sm" data-act="del-cli" data-id="${c.id}">🗑️</button></td>
+      <td data-label="Client"><div style="display:flex;align-items:center;gap:10px"><div class="tbl-avatar">${escapeHtml(initials)}</div><div><div style="font-weight:600">${escapeHtml(c.nom || '–')}</div><div style="font-size:11px;color:var(--txl)">${escapeHtml(c.email || '')}</div></div></div></td>
+      <td data-label="Téléphone">${escapeHtml(c.telephone || '–')}</td>
+      <td data-label="Adresse" class="td-adresse" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(c.adresse || '–')}</td>
+      <td data-label="Notes">${escapeHtml(c.notes || '–')}</td>
+      <td data-label="Action" style="display:flex;gap:6px"><button class="btn btn-ghost btn-sm" data-act="edit-cli" data-id="${c.id}">✏️ Modifier</button><button class="btn btn-danger btn-sm" data-act="del-cli" data-id="${c.id}">🗑️</button></td>
     </tr>`;
   }).join('');
   showContent(`<div class="card">
@@ -1588,7 +1978,7 @@ function renderClients() {
       <div class="card-tit">👥 Clients <span>${DATA.clients.length}</span></div>
       <button class="btn btn-primary" id="btnNewCli">+ Nouveau client</button>
     </div>
-    <div class="tbl-wrap"><table class="tbl">
+    <div class="tbl-wrap"><table class="tbl tbl-cards">
       <thead><tr><th>Client</th><th>Telephone</th><th>Adresse</th><th>Notes</th><th>Action</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="5" class="empty">Aucun client</td></tr>'}</tbody>
     </table></div>
@@ -1598,9 +1988,22 @@ function renderClients() {
   $('content').querySelectorAll('[data-act="del-cli"]').forEach(b => b.addEventListener('click', () => supprimerClient(b.dataset.id)));
 }
 
+// Remplit le select "Attribuee a" : "Moi (tete de reseau)" + chaque cuisiniere. selectedId vide = la tete.
+function fillAssigneSelect(selectedId) {
+  const sel = $('cAssigne');
+  if (!sel) return;
+  const opts = ['<option value="">' + escapeHtml((getCurrentEntreprise() || {}).nom_marque || 'Mon compte') + '</option>']
+    .concat(DATA.salaries.map(s => `<option value="${s.id}">${escapeHtml(s.nom || '–')}</option>`));
+  sel.innerHTML = opts.join('');
+  sel.value = selectedId || '';
+}
+
 function nouveauClient() {
   ['cId', 'cNom', 'cEmail', 'cTel', 'cMdp', 'cAdresse', 'cNotes'].forEach(id => { const el = $(id); if (el) el.value = ''; });
   $('cPortions').value = 4;
+  fillAssigneSelect('');
+  $('cMdp').placeholder = 'Choisis un mot de passe pour elle';
+  $('cMdpHelp').textContent = "C'est le mot de passe que ta cliente utilisera pour se connecter à son espace.";
   $('modalCliTit').textContent = 'Nouveau client'; openModal('modalClient');
 }
 function editerClient(id) {
@@ -1610,7 +2013,10 @@ function editerClient(id) {
   $('cEmail').value = c.email || '';
   $('cTel').value = c.telephone || '';
   $('cMdp').value = '';
+  $('cMdp').placeholder = 'Laisse vide si tu ne veux pas le changer';
+  $('cMdpHelp').textContent = "Remplis ce champ seulement pour définir un nouveau mot de passe. Si tu le laisses vide, l'ancien reste inchangé.";
   $('cPortions').value = c.nombre_portions || 4;
+  fillAssigneSelect(c.assigne_a_id || '');
   $('cAdresse').value = c.adresse || '';
   $('cNotes').value = c.notes || '';
   $('modalCliTit').textContent = 'Modifier · ' + (c.nom || 'client');
@@ -1630,7 +2036,12 @@ async function adminAction(action, payload = {}) {
     body: JSON.stringify({ access_token: session.access_token, action, payload })
   });
   const d = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(d.error || ('Erreur ' + r.status));
+  if (!r.ok) {
+    if (r.status === 403 && /non autoris/i.test(d.error || '')) {
+      throw new Error("Ta session n'est plus celle de l'admin (tu t'es peut-être connectée avec un autre compte dans un autre onglet). Reconnecte-toi en tant qu'admin.");
+    }
+    throw new Error(d.error || ('Erreur ' + r.status));
+  }
   return d;
 }
 
@@ -1643,7 +2054,9 @@ async function saveClient() {
   const portions = parseInt($('cPortions').value, 10) || 4;
   const adresse = $('cAdresse').value.trim();
   const notes = $('cNotes').value.trim();
+  const assigne_a_id = ($('cAssigne') && $('cAssigne').value) || null; // vide = la tete de reseau
   if (!nom || !email) { toast('⚠️ Nom et email obligatoires'); return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast('⚠️ Email invalide (format attendu : nom@domaine.fr)'); return; }
   if (portions < 1 || portions > 20) { toast('⚠️ Nb portions entre 1 et 20'); return; }
   if (!id && !(await checkPlanLimit('clientes', 'clientes'))) return;
 
@@ -1652,20 +2065,19 @@ async function saveClient() {
       if (mdp || email !== (getClient(id).email)) {
         await adminAction('update_user_auth', { id, type: 'client', email: email !== getClient(id).email ? email : undefined, password: mdp || undefined });
       }
-      const payload = { nom, email, telephone: telephone || null, adresse: adresse || null, notes: notes || null, nombre_portions: portions };
-      const { error } = await sb.from('clients').update(payload).eq('id', id);
-      if (error) throw error;
+      const payload = { nom, email, telephone: telephone || null, adresse: adresse || null, notes: notes || null, nombre_portions: portions, assigne_a_id };
+      await writeVerified(() => sb.from('clients').update(payload).eq('id', id).select('id'));
       const c = getClient(id); if (c) Object.assign(c, payload);
       toast('✅ Client modifie');
     } else {
       if (!mdp) { toast('⚠️ Mot de passe obligatoire pour creation'); return; }
-      const { profile } = await adminAction('create_user', { email, password: mdp, type: 'client', nom, telephone, adresse, notes, nombre_portions: portions });
+      const { profile } = await adminAction('create_user', { email, password: mdp, type: 'client', nom, telephone, adresse, notes, nombre_portions: portions, assigne_a_id });
       if (profile) DATA.clients.push(profile);
       toast('✅ Client cree');
     }
     closeModal('modalClient'); renderClients();
   } catch (e) {
-    toast('Erreur: ' + (e.message || e));
+    toast('⚠️ ' + msgErr(e));
   }
 }
 
@@ -1683,30 +2095,54 @@ async function supprimerClient(id) {
     const tab = document.querySelector('.tab.active')?.dataset.tab;
     showTab(tab || 'clients');
   } catch (e) {
-    toast('Erreur: ' + (e.message || e));
+    toast('⚠️ ' + msgErr(e));
   }
 }
 
 // --- SALARIES ---
+// Reseau : stats d'activite pour une cuisiniere (assigneId = null => la tete de reseau)
+function reseauStats(assigneId) {
+  const ym = new Date().toISOString().slice(0, 7);
+  const clientes = DATA.clients.filter(c => (c.assigne_a_id || null) === assigneId).length;
+  const cmds = DATA.commandes.filter(c => (c.assigne_a_id || null) === assigneId);
+  const caMois = cmds.filter(c => (c.semaine_du || '').startsWith(ym) && c.statut === 'Confirmée').reduce((a, c) => a + Number(c.montant || 0), 0);
+  return { clientes, commandes: cmds.length, caMois };
+}
+
 function renderSalaries() {
   const rows = DATA.salaries.map(s => {
     const initials = (s.nom || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-    const nbCmds = DATA.commandes.filter(c => c.assigne_a_id === s.id).length;
+    const st = reseauStats(s.id);
     return `<tr>
       <td><div style="display:flex;align-items:center;gap:10px"><div class="tbl-avatar">${escapeHtml(initials)}</div><div style="font-weight:600">${escapeHtml(s.nom || '–')}</div></div></td>
       <td>${escapeHtml(s.email || '–')}</td>
       <td>${escapeHtml(s.telephone || '–')}</td>
-      <td><span class="badge b-ok">${nbCmds} commande(s)</span></td>
+      <td><span class="badge b-ok">${st.clientes} cliente(s)</span> <span class="badge b-ok">${st.commandes} cmd</span> <span class="badge b-ok">${Math.round(st.caMois)}€/mois</span></td>
       <td style="display:flex;gap:6px"><button class="btn btn-ghost btn-sm" data-act="edit-sal" data-id="${s.id}">✏️ Modifier</button><button class="btn btn-danger btn-sm" data-act="del-sal" data-id="${s.id}">🗑️</button></td>
     </tr>`;
   }).join('');
-  showContent(`<div class="card">
+
+  // Vue d'ensemble : une carte par cuisiniere + "Moi (tete de reseau)"
+  const overviewCards = [{ id: null, nom: (getCurrentEntreprise() || {}).nom_marque || 'Mon compte' }].concat(DATA.salaries.map(s => ({ id: s.id, nom: s.nom || '–' })))
+    .map(o => {
+      const st = reseauStats(o.id);
+      return `<div style="background:var(--bgc);border:1px solid var(--bgd);border-radius:12px;padding:12px 14px;min-width:150px;flex:1">
+        <div style="font-weight:600;margin-bottom:6px">${o.id === null ? '👑 ' : '👩‍🍳 '}${escapeHtml(o.nom)}</div>
+        <div style="font-size:12px;color:var(--txm);line-height:1.6">${st.clientes} cliente(s)<br>${st.commandes} commande(s)<br><strong style="color:var(--v2)">${Math.round(st.caMois)}€</strong> ce mois</div>
+      </div>`;
+    }).join('');
+
+  showContent(`<div class="card" style="margin-bottom:16px">
+    <div class="card-head"><div class="card-tit">📊 Activité par cuisinière</div></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">${overviewCards}</div>
+  </div>
+  <div class="card">
     <div class="card-head">
       <div class="card-tit">🤝 Partenaires <span>${DATA.salaries.length}</span></div>
       <button class="btn btn-primary" id="btnNewSal">+ Nouveau partenaire</button>
     </div>
     <div class="tbl-wrap"><table class="tbl">
-      <thead><tr><th>Partenaire</th><th>Email</th><th>Telephone</th><th>Activite</th><th>Action</th></tr></thead>
+      <thead><tr><th>Partenaire</th><th>Email</th><th>Telephone</th><th>Activité (ce mois)</th><th>Action</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="5" class="empty">Aucun partenaire</td></tr>'}</tbody>
     </table></div>
   </div>`);
@@ -1736,6 +2172,15 @@ async function saveSalarie() {
   const telephone = $('sTel').value.trim();
   const mdp = $('sMdp').value.trim();
   if (!nom || !email) { toast('⚠️ Nom et email obligatoires'); return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast('⚠️ Email invalide (format attendu : nom@domaine.fr)'); return; }
+  // Blocage dur : on ne dépasse pas le nombre de cuisinières de la formule
+  if (!id) {
+    const cap = reseauSeatsPaid(getCurrentEntreprise());
+    if (cap != null && DATA.salaries.length >= cap) {
+      toast(`⚠️ Votre formule est limitée à ${cap} cuisinière(s). Passez à la formule supérieure (⚙️ Paramètres → Changer de formule) pour en ajouter.`);
+      return;
+    }
+  }
 
   try {
     if (id) {
@@ -1743,8 +2188,7 @@ async function saveSalarie() {
         await adminAction('update_user_auth', { id, type: 'salarie', email: email !== getSalarie(id).email ? email : undefined, password: mdp || undefined });
       }
       const payload = { nom, email, telephone: telephone || null };
-      const { error } = await sb.from('salaries').update(payload).eq('id', id);
-      if (error) throw error;
+      await writeVerified(() => sb.from('salaries').update(payload).eq('id', id).select('id'));
       const s = getSalarie(id); if (s) Object.assign(s, payload);
       toast('✅ Partenaire modifie');
     } else {
@@ -1755,7 +2199,7 @@ async function saveSalarie() {
     }
     closeModal('modalSalarie'); renderSalaries();
   } catch (e) {
-    toast('Erreur: ' + (e.message || e));
+    toast('⚠️ ' + msgErr(e));
   }
 }
 async function supprimerSalarie(id) {
@@ -1774,7 +2218,7 @@ async function supprimerSalarie(id) {
     const tab = document.querySelector('.tab.active')?.dataset.tab;
     showTab(tab || 'salaries');
   } catch (e) {
-    toast('Erreur: ' + (e.message || e));
+    toast('⚠️ ' + msgErr(e));
   }
 }
 
@@ -1788,8 +2232,7 @@ async function toggleCren(sem, slotKey, currentActif) {
   const existing = DATA.creneaux.find(c => c.semaine === sem && c.slot === slotKey);
   try {
     if (existing) {
-      const { error } = await sb.from('creneaux').update({ actif: newVal }).eq('id', existing.id);
-      if (error) throw error;
+      await writeVerified(() => sb.from('creneaux').update({ actif: newVal }).eq('id', existing.id).select('id'));
       existing.actif = newVal;
     } else {
       const { data, error } = await sb.from('creneaux').insert({ semaine: sem, slot: slotKey, actif: newVal, entreprise_id: CURRENT_ENTREPRISE_ID }).select().single();
@@ -1797,7 +2240,7 @@ async function toggleCren(sem, slotKey, currentActif) {
       DATA.creneaux.push(data);
     }
     toast(newVal ? '✅ Creneau ouvert' : 'Creneau ferme'); renderCreneaux();
-  } catch (e) { toast('Erreur: ' + (e.message || e)); }
+  } catch (e) { toast('⚠️ ' + msgErr(e)); }
 }
 
 function renderCreneaux() {
@@ -1806,14 +2249,14 @@ function renderCreneaux() {
   const isPasse = semaine < todayMon;
   const [yy, mm, dd] = semaine.split('-').map(Number);
   // Jours actifs = ceux qui ont au moins un slot dans le template
-  const jours = JOURS_ORDER.filter(j => DATA.creneauxTemplate.some(t => t.jour === j));
+  const jours = JOURS_ORDER.filter(j => DATA.creneauxTemplate.some(t => t.jour === j && !t.salarie_id));
   const joursHtml = jours.length === 0
     ? '<div class="empty" style="grid-column:1/-1"><div class="empty-icon">⚙️</div><div class="empty-txt">Aucun créneau configuré.<br>Cliquez sur ⚙️ Paramètres pour en ajouter.</div></div>'
     : jours.map(jour => {
       const jd = new Date(yy, mm - 1, dd + JMAP_FULL[jour]);
       const dateLabel = jd.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
       const cmdJ = DATA.commandes.filter(c => (c.semaine_du || '').startsWith(semaine) && (c.creneau || '').toLowerCase().includes(jour.toLowerCase()));
-      const slotsForJour = getSlotsForJour(jour);
+      const slotsForJour = mesSlotsForJour(jour);
       const slotsHtml = slotsForJour.map(s => {
         const k = `${jour}_${s.nom_slot}`;
         const actif = crActif(semaine, k);
@@ -1882,7 +2325,50 @@ function applyEntrepriseBranding() {
   }
   if (e.couleur_principale) document.documentElement.style.setProperty('--brand-primary', e.couleur_principale);
   if (e.couleur_secondaire) document.documentElement.style.setProperty('--brand-secondary', e.couleur_secondaire);
-  if (e.couleur_topbar) document.documentElement.style.setProperty('--topbar-bg', e.couleur_topbar);
+  if (e.couleur_topbar) setTopbarColor(e.couleur_topbar);
+}
+
+// --- EXPORT DE DONNEES (portabilite, engagement CGU art.10) ---
+function downloadCsv(filename, headers, rows) {
+  const csv = [headers, ...rows].map(row => row.map(cell => {
+    const s = String(cell ?? '');
+    return /[",;\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }).join(';')).join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function exporterMesDonnees() {
+  const today = new Date().toISOString().slice(0, 10);
+  const prefix = (getCurrentEntreprise()?.slug || 'mybatch') + '-' + today;
+
+  downloadCsv(`${prefix}-clientes.csv`,
+    ['ID', 'Nom', 'Email', 'Téléphone', 'Adresse', 'Portions par défaut', 'Notes'],
+    DATA.clients.map(c => [c.id, c.nom || '', c.email || '', c.telephone || '', c.adresse || '', c.nombre_portions || '', c.notes || '']));
+
+  downloadCsv(`${prefix}-recettes.csv`,
+    ['ID', 'Nom du plat', 'Catégories', 'État'],
+    DATA.recettes.map(r => [r.id, r.nom_du_plat || '', (Array.isArray(r.categories) ? r.categories.join(', ') : ''), getEtat(r)]));
+
+  downloadCsv(`${prefix}-commandes.csv`,
+    ['ID', 'Semaine du', 'Client', 'Créneau', 'Portions', 'Statut', 'Montant (€)', 'Message cliente'],
+    DATA.commandes.map(c => {
+      const cli = getClient(c.client_id) || {};
+      return [c.id, c.semaine_du || '', cli.nom || '', c.creneau || '', c.nombre_portions || '', c.statut || '', c.montant ?? '', c.message_client || ''];
+    }));
+
+  downloadCsv(`${prefix}-ingredients.csv`,
+    ['ID', 'Nom', 'Unité par défaut', 'Rayon'],
+    DATA.ingredients.map(i => [i.id, i.nom || '', i.unite_par_defaut || '', i.rayon || '']));
+
+  toast('✅ 4 fichiers CSV téléchargés (clientes, recettes, commandes, ingrédients)');
 }
 
 async function renderParametres() {
@@ -1894,10 +2380,10 @@ async function renderParametres() {
     </div>
     <p style="color:var(--txm);margin-bottom:18px;font-size:13px">Personnalise ton espace : ces infos apparaissent sur ton login, ton portail client et tes communications.</p>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:18px;margin-bottom:18px">
       <div class="fg">
         <label>Nom de ta marque *</label>
-        <input id="prmNom" type="text" value="${escapeAttr(e.nom_marque || '')}" placeholder="Ex: Le Goût du Lien">
+        <input id="prmNom" type="text" value="${escapeAttr(e.nom_marque || '')}" placeholder="Ex: Les Bons Petits Plats">
       </div>
       <div class="fg">
         <label>Email admin (login)</label>
@@ -1924,7 +2410,7 @@ async function renderParametres() {
       </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:18px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:18px">
       <div class="fg">
         <label>Couleur principale</label>
         <div style="display:flex;align-items:center;gap:8px">
@@ -1955,21 +2441,38 @@ async function renderParametres() {
     </div>
 
     <div class="fg" style="margin-bottom:18px">
+      <label>🔥 Max de plats au four par commande</label>
+      <input id="prmMaxFour" type="number" min="0" step="1" placeholder="Aucune limite" value="${e.max_four_commande != null ? escapeAttr(String(e.max_four_commande)) : ''}" style="max-width:200px">
+      <div style="font-size:11px;color:var(--txl);margin-top:4px">Empêche la cliente de choisir trop de plats « au four » dans une même commande (problème de timing). Laisse vide = aucune limite. Coche « va au four » sur chaque recette concernée.</div>
+    </div>
+
+    <div class="fg" style="margin-bottom:18px">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal"><input id="prmCreditImpot" type="checkbox" style="width:auto;margin:0" ${e.credit_impot_sap ? 'checked' : ''}> 💶 Afficher le crédit d'impôt (−50%) — services à la personne</label>
+      <div style="font-size:11px;color:var(--txl);margin-top:4px">Si activé, la cliente voit « Prestation X€ » puis « À votre charge ≈ X/2 € après crédit d'impôt ». Le montant enregistré reste le prix plein. Active-le seulement si tes prestations ouvrent droit au crédit d'impôt SAP.</div>
+    </div>
+
+    <div class="fg" style="margin-bottom:18px">
       <label>Instructions de paiement (affichées à tes clientes)</label>
       <textarea id="prmPaiement" rows="5" placeholder="Ex: Virement sur RIB FR76... | Lien Abby URSSAF | Espèces à la livraison | CESU déclaratif | Sumeria...">${escapeHtml(e.instructions_paiement || '')}</textarea>
       <div style="font-size:11px;color:var(--txl);margin-top:4px">Texte libre — décris ton mode de paiement comme tu le veux. C'est ce que verra ta cliente après commande.</div>
     </div>
 
     <div style="display:flex;gap:12px;margin-top:24px;padding-bottom:24px;border-bottom:1px solid var(--bgd);flex-wrap:wrap">
-      <button class="btn btn-pri" id="prmSave">💾 Enregistrer mes paramètres</button>
+      <button class="btn btn-primary" id="prmSave">💾 Enregistrer mes paramètres</button>
       ${e.plan !== 'founder' ? `<button class="btn btn-ghost" id="prmManageSub">💳 Gérer mon abonnement</button>` : ''}
+      ${isReseau() ? `<button class="btn btn-ghost" id="prmChangeFormule">🌐 Changer de formule</button>` : ''}
+      ${e.cycle === 'annuel' ? `<button class="btn btn-ghost" id="prmGuide">📕 Mon guide</button>` : ''}
+      ${isReseau()
+        ? `<a href="/notice-my-batch-reseau.pdf" download="Notice-my-batch-Reseau.pdf" class="btn btn-ghost">📘 Télécharger la notice</a>`
+        : `<a href="/notice-my-batch.pdf" download="Notice-my-batch.pdf" class="btn btn-ghost">📘 Télécharger la notice</a>`}
+      <button class="btn btn-ghost" id="prmExport">📤 Exporter mes données</button>
       <span id="prmStatus" style="font-size:13px;color:var(--txl);align-self:center"></span>
     </div>
 
     <div style="margin-top:32px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <h3 style="font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:600;color:var(--v2)">📦 Mes forfaits</h3>
-        <button class="btn btn-pri btn-sm" id="prmAddForfait">+ Ajouter un forfait</button>
+        <button class="btn btn-primary btn-sm" id="prmAddForfait">+ Ajouter un forfait</button>
       </div>
       <p style="color:var(--txm);font-size:13px;margin-bottom:18px">Définis tes offres : tes clientes choisiront un forfait au moment de leur commande, et le prix de la commande dérive du forfait choisi.</p>
       <div id="prmForfaitsList"></div>
@@ -1992,6 +2495,97 @@ async function renderParametres() {
   $('prmSave').addEventListener('click', saveParametres);
   $('prmAddForfait').addEventListener('click', () => openForfaitForm(null));
   $('prmManageSub')?.addEventListener('click', ouvrirPortailStripe);
+  $('prmChangeFormule')?.addEventListener('click', ouvrirChangeFormule);
+  $('prmGuide')?.addEventListener('click', telechargerGuide);
+  $('prmExport').addEventListener('click', exporterMesDonnees);
+}
+
+// Reseau : la tete de reseau change sa formule elle-meme (met a jour Stripe + la base)
+function ouvrirChangeFormule() {
+  const e = getCurrentEntreprise();
+  const cur = e.formule || 'reseau_pro';
+  const curQ = parseInt(e.reseau_cuisinieres, 10) || 10;
+  const optCss = 'display:flex;align-items:flex-start;gap:10px;border:1.5px solid var(--bgd);border-radius:10px;padding:11px 13px;cursor:pointer;font-size:13.5px';
+  const pop = document.createElement('div');
+  pop.className = 'overlay open'; pop.style.zIndex = '600';
+  pop.innerHTML = `<div class="modal" style="max-width:460px">
+    <div class="modal-head"><div class="modal-tit">🌐 Changer de formule réseau</div></div>
+    <p style="font-size:13px;color:var(--txm);margin-bottom:14px">Changement immédiat. Stripe applique automatiquement le <b>prorata</b> sur votre facture.</p>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <label style="${optCss}"><input type="radio" name="cf" value="reseau_starter" ${cur === 'reseau_starter' ? 'checked' : ''} style="margin-top:2px"><span><b>Réseau Starter</b> — 149 €/mois<br><span style="color:var(--txl);font-size:12px">jusqu'à 3 cuisinières</span></span></label>
+      <label style="${optCss}"><input type="radio" name="cf" value="reseau_pro" ${cur === 'reseau_pro' ? 'checked' : ''} style="margin-top:2px"><span><b>Réseau Pro</b> — 279 €/mois<br><span style="color:var(--txl);font-size:12px">jusqu'à 8 cuisinières</span></span></label>
+      <label style="${optCss}"><input type="radio" name="cf" value="reseau_illimite" ${cur === 'reseau_illimite' ? 'checked' : ''} style="margin-top:2px"><span><b>Réseau Illimité</b> — 279 € + 30 €/cuisinière au-delà de 8<br><span style="color:var(--txl);font-size:12px">9 cuisinières et plus</span></span></label>
+    </div>
+    <div id="cfQtyWrap" style="margin-top:12px;display:none;align-items:center;gap:10px">
+      <label style="font-size:13px;font-weight:600">Nombre de cuisinières :</label>
+      <input type="number" id="cfQty" min="9" max="200" value="${curQ < 9 ? 10 : curQ}" style="width:82px;padding:8px 10px;border:1.5px solid var(--bgd);border-radius:8px">
+      <span id="cfPrice" style="font-size:13px;color:var(--v2);font-weight:700"></span>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:18px">
+      <button class="btn btn-primary" id="cfSave" style="flex:1">Confirmer le changement</button>
+      <button class="btn btn-ghost" id="cfCancel">Annuler</button>
+    </div>
+  </div>`;
+  document.body.appendChild(pop);
+  const upd = () => {
+    const val = pop.querySelector('input[name="cf"]:checked').value;
+    pop.querySelector('#cfQtyWrap').style.display = val === 'reseau_illimite' ? 'flex' : 'none';
+    if (val === 'reseau_illimite') {
+      const q = Math.max(9, parseInt(pop.querySelector('#cfQty').value, 10) || 9);
+      pop.querySelector('#cfPrice').textContent = `→ ${279 + 30 * (q - 8)} €/mois`;
+    }
+  };
+  pop.querySelectorAll('input[name="cf"]').forEach(r => r.addEventListener('change', upd));
+  pop.querySelector('#cfQty').addEventListener('input', upd);
+  upd();
+  pop.querySelector('#cfCancel').addEventListener('click', () => pop.remove());
+  pop.querySelector('#cfSave').addEventListener('click', async () => {
+    const val = pop.querySelector('input[name="cf"]:checked').value;
+    const q = val === 'reseau_illimite' ? Math.max(9, parseInt(pop.querySelector('#cfQty').value, 10) || 9) : undefined;
+    const btn = pop.querySelector('#cfSave'); btn.disabled = true; btn.textContent = '⏳ Mise à jour…';
+    try {
+      const { data: { session } } = await sbAuth.auth.getSession();
+      if (!session) { toast('Session expirée — reconnecte-toi.'); btn.disabled = false; btn.textContent = 'Confirmer le changement'; return; }
+      const r = await fetch('/.netlify/functions/reseau-change-formule', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ access_token: session.access_token, formule: val, nb_cuisinieres: q })
+      });
+      const out = await r.json();
+      if (!r.ok) throw new Error(out.error || 'Erreur serveur');
+      toast('✅ Formule mise à jour');
+      pop.remove();
+      setTimeout(() => location.reload(), 700);
+    } catch (err) {
+      btn.disabled = false; btn.textContent = 'Confirmer le changement';
+      toast('⚠️ ' + msgErr(err));
+    }
+  });
+}
+
+async function telechargerGuide() {
+  const btn = $('prmGuide'); if (!btn) return;
+  const orig = btn.textContent; btn.disabled = true; btn.textContent = '⏳ Préparation…';
+  try {
+    const { data: { session } } = await sbAuth.auth.getSession();
+    if (!session) { toast('Session expirée — reconnecte-toi.'); return; }
+    const r = await fetch('/.netlify/functions/guide-abo', { method: 'POST', headers: { Authorization: 'Bearer ' + session.access_token } });
+    const ct = r.headers.get('Content-Type') || '';
+    if (r.ok && ct.includes('application/pdf')) {
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'Guide-my-batch.pdf';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      toast('📕 Guide téléchargé !');
+    } else {
+      const j = await r.json().catch(() => ({}));
+      toast(j.error || 'Guide indisponible pour le moment.');
+    }
+  } catch (e) {
+    toast('⚠️ ' + msgErr(e));
+  } finally {
+    btn.disabled = false; btn.textContent = orig;
+  }
 }
 
 async function ouvrirPortailStripe() {
@@ -2007,14 +2601,15 @@ async function ouvrirPortailStripe() {
     if (!r.ok) throw new Error(data.error || 'Erreur ouverture portail');
     window.location.href = data.url;
   } catch (e) {
-    toast('Erreur : ' + (e.message || e));
+    toast('⚠️ ' + msgErr(e));
   }
 }
 
 function renderForfaitsList() {
   const list = $('prmForfaitsList');
   if (!list) return;
-  const forfaits = [...DATA.forfaits].sort((a, b) => (a.ordre || 0) - (b.ordre || 0));
+  // La tête ne gère que SES forfaits (salarie_id null) ; chaque cuisinière gère les siens dans son portail
+  const forfaits = DATA.forfaits.filter(f => !f.salarie_id).sort((a, b) => (a.ordre || 0) - (b.ordre || 0));
   if (!forfaits.length) {
     list.innerHTML = `<div style="background:var(--bgc);border:1.5px dashed var(--bgd);border-radius:14px;padding:24px;text-align:center;color:var(--txl);font-size:13px">Aucun forfait pour le moment. Crée ton premier pour que tes clientes puissent commander.</div>`;
     return;
@@ -2047,12 +2642,21 @@ function openForfaitForm(id) {
   form.innerHTML = `
     <div style="background:var(--bgc);border:1.5px solid var(--vl);border-radius:14px;padding:18px;margin-top:10px">
       <div style="font-weight:600;margin-bottom:14px;color:var(--v2)">${id ? '✏️ Modifier le forfait' : '+ Nouveau forfait'}</div>
-      <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-bottom:12px">
-        <div class="fg"><label>Nom *</label><input id="forfNom" type="text" placeholder="Ex: Découverte, Semaine, Mensuel" value="${escapeAttr(f?.nom || '')}"></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:12px">
+        <div class="fg"><label>Nom *</label><input id="forfNom" type="text" placeholder="Ex: Découverte, Semaine, Semaine + courses" value="${escapeAttr(f?.nom || '')}"></div>
         <div class="fg"><label>Prix (€) *</label><input id="forfPrix" type="number" min="0" step="0.01" placeholder="60" value="${escapeAttr(String(f?.prix ?? ''))}"></div>
       </div>
       <div class="fg" style="margin-bottom:12px"><label>Description (optionnel — visible client)</label><textarea id="forfDesc" rows="2" placeholder="Ex: 5 plats batch cookés, 4 portions, liste de courses 48h avant">${escapeHtml(f?.description || '')}</textarea></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px">
+      <div class="fg" style="margin-bottom:12px"><label>Composition de la formule (nombre par type)</label>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-top:4px">
+          <div><label style="font-size:11px;color:var(--txl)">🥗 Entrées</label><input id="forfNbEntrees" type="number" min="0" step="1" value="${f?.nb_entrees ?? 0}"><label style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--txl);margin-top:3px;cursor:pointer;font-weight:normal"><input id="forfOptEntrees" type="checkbox" style="width:auto;margin:0" ${f?.opt_entree ? 'checked' : ''}> optionnel</label></div>
+          <div><label style="font-size:11px;color:var(--txl)">🍽️ Plats</label><input id="forfNbPlats" type="number" min="0" step="1" value="${f?.nb_plats ?? 5}"><label style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--txl);margin-top:3px;cursor:pointer;font-weight:normal"><input id="forfOptPlats" type="checkbox" style="width:auto;margin:0" ${f?.opt_plat ? 'checked' : ''}> optionnel</label></div>
+          <div><label style="font-size:11px;color:var(--txl)">🍰 Desserts</label><input id="forfNbDesserts" type="number" min="0" step="1" value="${f?.nb_desserts ?? 0}"><label style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--txl);margin-top:3px;cursor:pointer;font-weight:normal"><input id="forfOptDesserts" type="checkbox" style="width:auto;margin:0" ${f?.opt_dessert ? 'checked' : ''}> optionnel</label></div>
+          <div><label style="font-size:11px;color:var(--txl)">➕ Petits plus</label><input id="forfNbPetitPlus" type="number" min="0" step="1" value="${f?.nb_petit_plus ?? 0}"><label style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--txl);margin-top:3px;cursor:pointer;font-weight:normal"><input id="forfOptPetitPlus" type="checkbox" style="width:auto;margin:0" ${f?.opt_petit_plus ? 'checked' : ''}> optionnel</label></div>
+        </div>
+        <div style="font-size:11px;color:var(--txl);margin-top:4px">La cliente choisit ce nombre de chaque type. Si tu coches <b>« optionnel »</b> pour un type, elle peut en prendre <b>de 0 à ce nombre</b> (ça ne la bloque pas). Ex : 2 plats + 2 desserts avec desserts optionnels → elle prend 2 plats obligatoirement, et 0, 1 ou 2 desserts.</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:14px">
         <div class="fg"><label>Badge (optionnel)</label><input id="forfBadge" type="text" placeholder="Ex: Bienvenue, Meilleure offre" value="${escapeAttr(f?.badge || '')}"></div>
         <div class="fg"><label>Ordre d'affichage</label><input id="forfOrdre" type="number" min="0" step="1" value="${f?.ordre ?? 0}"></div>
         <div class="fg"><label>Statut</label><select id="forfActive"><option value="true" ${f?.active !== false ? 'selected' : ''}>✓ Actif</option><option value="false" ${f?.active === false ? 'selected' : ''}>✗ Inactif</option></select></div>
@@ -2065,7 +2669,7 @@ function openForfaitForm(id) {
         <div style="font-size:11px;color:var(--txl);margin-top:4px;margin-left:28px">Si coché : à la commande, la liste de courses sera cachée du portail de cette cliente (c'est toi qui shop). Affiche un badge "Courses à faire" sur ton planning.</div>
       </div>
       <div style="display:flex;gap:10px">
-        <button class="btn btn-pri" id="forfSave">💾 ${id ? 'Enregistrer' : 'Créer'}</button>
+        <button class="btn btn-primary" id="forfSave">💾 ${id ? 'Enregistrer' : 'Créer'}</button>
         <button class="btn btn-ghost" id="forfCancel">Annuler</button>
       </div>
     </div>
@@ -2085,11 +2689,19 @@ async function saveForfait(id) {
   if (isNaN(prix) || prix < 0) { toast('⚠️ Prix invalide'); return; }
 
   const inclutCourses = $('forfIncCourses')?.checked || false;
-  const payload = { nom, prix, description: description || null, badge: badge || null, ordre, active, inclut_courses: inclutCourses };
+  const nb_entrees = parseInt($('forfNbEntrees')?.value, 10) || 0;
+  const nb_plats = parseInt($('forfNbPlats')?.value, 10) || 0;
+  const nb_desserts = parseInt($('forfNbDesserts')?.value, 10) || 0;
+  const nb_petit_plus = parseInt($('forfNbPetitPlus')?.value, 10) || 0;
+  if (nb_entrees + nb_plats + nb_desserts + nb_petit_plus < 1) { toast('⚠️ La formule doit contenir au moins 1 élément (entrée, plat, dessert ou petit plus)'); return; }
+  const opt_entree = $('forfOptEntrees')?.checked || false;
+  const opt_plat = $('forfOptPlats')?.checked || false;
+  const opt_dessert = $('forfOptDesserts')?.checked || false;
+  const opt_petit_plus = $('forfOptPetitPlus')?.checked || false;
+  const payload = { nom, prix, description: description || null, badge: badge || null, ordre, active, inclut_courses: inclutCourses, nb_entrees, nb_plats, nb_desserts, nb_petit_plus, opt_entree, opt_plat, opt_dessert, opt_petit_plus };
   try {
     if (id) {
-      const { error } = await sb.from('forfaits').update(payload).eq('id', id);
-      if (error) throw error;
+      await writeVerified(() => sb.from('forfaits').update(payload).eq('id', id).select('id'));
       const f = DATA.forfaits.find(x => x.id === id); if (f) Object.assign(f, payload);
       toast('✅ Forfait modifié');
     } else {
@@ -2102,7 +2714,7 @@ async function saveForfait(id) {
     $('prmForfaitForm').innerHTML = '';
     renderForfaitsList();
   } catch (e) {
-    toast('Erreur : ' + (e.message || e));
+    toast('⚠️ ' + msgErr(e));
   }
 }
 
@@ -2110,13 +2722,12 @@ async function supprimerForfait(id) {
   const f = DATA.forfaits.find(x => x.id === id); if (!f) return;
   if (!confirm(`Supprimer le forfait "${f.nom}" ?\nLes commandes existantes ne sont pas affectées (le prix reste figé sur la commande).`)) return;
   try {
-    const { error } = await sb.from('forfaits').delete().eq('id', id);
-    if (error) throw error;
+    await writeVerified(() => sb.from('forfaits').delete().eq('id', id).select('id'));
     DATA.forfaits = DATA.forfaits.filter(x => x.id !== id);
     toast('🗑️ Forfait supprimé');
     renderForfaitsList();
   } catch (e) {
-    toast('Erreur : ' + (e.message || e));
+    toast('⚠️ ' + msgErr(e));
   }
 }
 
@@ -2136,8 +2747,23 @@ async function uploadParametresLogo(file) {
     $('prmLogoPreview').innerHTML = `<img src="${escapeAttr(pub.publicUrl)}" style="width:100%;height:100%;object-fit:cover">`;
     $('prmLogoNom').textContent = '✅ Logo uploadé — clique Enregistrer';
   } catch (e) {
-    $('prmLogoNom').textContent = 'Erreur : ' + (e.message || e);
+    $('prmLogoNom').textContent = '⚠️ ' + msgErr(e);
   }
+}
+
+// Ecriture RLS verifiee : sans .select(), un UPDATE/DELETE touchant 0 ligne (juste apres login,
+// JWT pas encore propage -> auth.uid() NULL -> RLS filtre la ligne) renvoie error=null = faux succes
+// silencieux. writeVerified execute la requete (qui DOIT finir par .select('id')) ; si 0 ligne il
+// rafraichit la session et reessaie 1x, sinon il leve une vraie erreur visible.
+async function writeVerified(runQuery) {
+  let res = await runQuery();
+  if (!res.error && (!res.data || res.data.length === 0)) {
+    try { await sb.auth.refreshSession(); } catch (_) {}
+    res = await runQuery();
+  }
+  if (res.error) throw res.error;
+  if (!res.data || res.data.length === 0) throw new Error('Action non prise en compte (session expirée ?). Reconnecte-toi et réessaie.');
+  return res.data;
 }
 
 async function saveParametres() {
@@ -2148,6 +2774,9 @@ async function saveParametres() {
   const col2 = $('prmCol2Hex').value.trim();
   const col3 = $('prmCol3Hex').value.trim();
   const montant = parseInt($('prmMontant').value, 10);
+  const maxFourRaw = ($('prmMaxFour')?.value ?? '').trim();
+  const maxFour = maxFourRaw === '' ? null : (parseInt(maxFourRaw, 10) || 0);
+  const creditImpot = $('prmCreditImpot') ? $('prmCreditImpot').checked : false;
   const paiement = $('prmPaiement').value.trim();
   const logo = $('prmLogoUrl').value.trim();
   if (!nom) { toast('⚠️ Le nom de la marque est obligatoire'); return; }
@@ -2166,6 +2795,8 @@ async function saveParametres() {
     couleur_secondaire: col2,
     couleur_topbar: col3,
     montant_client_default: montant,
+    max_four_commande: maxFour,
+    credit_impot_sap: creditImpot,
     instructions_paiement: paiement || null,
     logo_url: logo || null
   };
@@ -2187,13 +2818,12 @@ async function saveParametres() {
         if (!uid) throw new Error('Session perdue');
         await adminAction('update_user_auth', { id: uid, email: authUpdate.email, password: authUpdate.password });
       } catch (eAuth) {
-        $('prmStatus').textContent = '❌ Auth : ' + (eAuth.message || eAuth);
+        $('prmStatus').textContent = '❌ ' + msgErr(eAuth);
         return;
       }
     }
 
-    const { error } = await sb.from('entreprises').update(payload).eq('id', CURRENT_ENTREPRISE_ID);
-    if (error) throw error;
+    await writeVerified(() => sb.from('entreprises').update(payload).eq('id', CURRENT_ENTREPRISE_ID).select('id'));
     Object.assign(oldEnt, payload);
     applyEntrepriseBranding();
     $('prmNewPwd').value = '';
@@ -2208,7 +2838,7 @@ async function saveParametres() {
       setTimeout(() => { $('prmStatus').textContent = ''; }, 3000);
     }
   } catch (e) {
-    $('prmStatus').textContent = '❌ Erreur : ' + (e.message || e);
+    $('prmStatus').textContent = '❌ ' + msgErr(e);
   }
 }
 
@@ -2217,6 +2847,10 @@ async function saveParametres() {
 function calculateMRR(e) {
   if (!e || e.plan === 'founder') return 0;
   if (e.subscription_status !== 'active') return 0; // trialing = pas encore facturé
+  // Illimite : base 279 + 30 par cuisiniere au-dela de 8 (utilise reseau_cuisinieres si dispo, sinon plancher 279)
+  if (e.formule === 'reseau_illimite') return 279 + 30 * Math.max(0, (parseInt(e.reseau_cuisinieres, 10) || 8) - 8);
+  if (e.formule === 'reseau_pro') return 279;
+  if (e.formule === 'reseau_starter') return 149;
   if (e.formule === 'premium' && e.cycle === 'mensuel') return 579;
   if (e.formule === 'standard' && e.cycle === 'mensuel') return 79;
   if (e.formule === 'standard' && e.cycle === 'annuel') return 758 / 12;
@@ -2229,11 +2863,12 @@ async function loadPlatformStats() {
     const ymThis = new Date().toISOString().slice(0, 7);
     const ymPrev = (() => { const d = new Date(); d.setMonth(d.getMonth() - 1); return d.toISOString().slice(0, 7); })();
     const ps = await adminAction('platform_stats');
-    const cliR = { data: ps.clients }, recR = { data: ps.recettes }, cmdR = { data: ps.commandes };
+    const cliR = { data: ps.clients }, recR = { data: ps.recettes }, cmdR = { data: ps.commandes }, salR = { data: ps.salaries };
     const stats = {};
     DATA.entreprises.forEach(e => {
-      stats[e.id] = { clients: 0, recettes: 0, commandes: 0, cmdMois: 0, caMois: 0, lastCmd: null };
+      stats[e.id] = { clients: 0, recettes: 0, commandes: 0, cmdMois: 0, caMois: 0, lastCmd: null, cuisinieres: 0 };
     });
+    (salR.data || []).forEach(x => { if (stats[x.entreprise_id]) stats[x.entreprise_id].cuisinieres++; });
     (cliR.data || []).forEach(c => { if (stats[c.entreprise_id]) stats[c.entreprise_id].clients++; });
     (recR.data || []).forEach(r => { if (stats[r.entreprise_id]) stats[r.entreprise_id].recettes++; });
     (cmdR.data || []).forEach(c => {
@@ -2263,6 +2898,28 @@ function usageBar(used, max, label) {
   </div>`;
 }
 
+// Réseau : est-ce une formule réseau, et combien de sièges cuisinières sont PAYÉS ?
+function isReseauFormule(e) { return e && (e.formule === 'reseau_starter' || e.formule === 'reseau_pro' || e.formule === 'reseau_illimite'); }
+function reseauSeatsPaid(e) {
+  if (!e) return null;
+  if (e.formule === 'reseau_starter') return 3;
+  if (e.formule === 'reseau_pro') return 8;
+  if (e.formule === 'reseau_illimite') { const n = parseInt(e.reseau_cuisinieres, 10); return Number.isFinite(n) ? n : null; }
+  return null;
+}
+// Ligne de contrôle anti-triche : cuisinières réellement actives vs payées
+function reseauSeatBadge(e, s) {
+  if (!isReseauFormule(e)) return '';
+  const actives = (s && s.cuisinieres) || 0;
+  const paid = reseauSeatsPaid(e);
+  const over = paid != null && actives > paid;
+  const bg = over ? '#fdecea' : '#e8f0e9';
+  const col = over ? '#c62828' : '#2d5a3d';
+  const paidStr = paid != null ? paid : '?';
+  const suffix = over ? ' — sous-déclaré !' : '';
+  return `<div style="font-size:11px;margin-top:5px;padding:3px 7px;border-radius:5px;font-weight:600;display:inline-block;background:${bg};color:${col}">${over ? '⚠️' : '👥'} ${actives} cuisinière${actives > 1 ? 's' : ''} active${actives > 1 ? 's' : ''} / payé ${paidStr}${suffix}</div>`;
+}
+
 function renderEntreprises() {
   const ents = DATA.entreprises;
   const stats = DATA.platformStats || {};
@@ -2282,7 +2939,7 @@ function renderEntreprises() {
     const subBadge = subscriptionStatusBadge(e);
     const formuleStr = e.plan === 'founder'
       ? '🎁 Founder'
-      : `${e.formule === 'premium' ? '💎 Premium' : '📦 Standard'} · ${e.cycle === 'annuel' ? 'Annuel' : 'Mensuel'}`;
+      : `${e.formule === 'reseau_illimite' ? '🌐 Réseau Illimité' : e.formule === 'reseau_pro' ? '🌐 Réseau Pro' : e.formule === 'reseau_starter' ? '🌐 Réseau Starter' : e.formule === 'premium' ? '💎 Premium' : '📦 Standard'} · ${e.cycle === 'annuel' ? 'Annuel' : 'Mensuel'}`;
     return `<tr>
       <td><div style="display:flex;align-items:center;gap:10px">
         ${e.logo_url ? `<img src="${escapeHtml(e.logo_url)}" style="width:36px;height:36px;border-radius:8px;object-fit:cover">` : `<div style="width:36px;height:36px;border-radius:8px;background:${escapeHtml(e.couleur_principale || '#3d6b4f')};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:16px">${escapeHtml((e.nom_marque || '?').charAt(0).toUpperCase())}</div>`}
@@ -2292,7 +2949,7 @@ function renderEntreprises() {
         </div>
       </div></td>
       <td>${escapeHtml(e.nom_contact || '–')}</td>
-      <td><div style="font-size:12px">${formuleStr}</div>${subBadge}</td>
+      <td><div style="font-size:12px">${formuleStr}</div>${subBadge}${reseauSeatBadge(e, s)}</td>
       <td>${activeBadge}</td>
       <td style="min-width:240px">
         ${e.plan === 'founder'
@@ -2419,7 +3076,7 @@ async function genererLienPaiement(entrepriseId) {
     try { await navigator.clipboard.writeText(data.url); } catch (_) {}
     alert(txt);
   } catch (err) {
-    toast('Erreur : ' + (err.message || err));
+    toast('⚠️ ' + msgErr(err));
   }
 }
 
@@ -2543,7 +3200,7 @@ async function saveEntreprise() {
     closeModal('modalEntreprise');
     renderEntreprises();
   } catch (e) {
-    toast('Erreur: ' + (e.message || e));
+    toast('⚠️ ' + msgErr(e));
   }
 }
 
@@ -2556,31 +3213,8 @@ async function supprimerEntreprise(id) {
     toast('🗑️ Entreprise supprimée');
     renderEntreprises();
   } catch (e) {
-    toast('Erreur: ' + (e.message || e));
+    toast('⚠️ ' + msgErr(e));
   }
-}
-
-// Upload logo entreprise
-async function uploadEntLogo(file) {
-  const btn = $('entBtnUpload'), nom = $('entLogoNom'), preview = $('entLogoPreview');
-  btn.textContent = '⏳ Upload...'; btn.disabled = true;
-  try {
-    const compressed = await compressImage(file, 600, 0.85);
-    const blob = compressed || file;
-    const ext = compressed ? 'jpg' : ((file.name.split('.').pop() || 'jpg').toLowerCase());
-    const ctype = compressed ? 'image/jpeg' : (file.type || 'image/jpeg');
-    const filename = `logos/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const { error } = await sb.storage.from(STORAGE_BUCKET).upload(filename, blob, { upsert: false, contentType: ctype });
-    if (error) throw error;
-    const { data: pub } = sb.storage.from(STORAGE_BUCKET).getPublicUrl(filename);
-    $('entLogo').value = pub.publicUrl;
-    preview.innerHTML = `<img src="${escapeHtml(pub.publicUrl)}" style="width:100%;height:100%;object-fit:cover">`;
-    nom.textContent = file.name;
-    toast('✅ Logo uploadé');
-  } catch (e) {
-    toast('Erreur upload : ' + (e.message || e));
-  }
-  btn.textContent = '📷 Changer le logo'; btn.disabled = false;
 }
 
 // === PARAMETRES CRENEAUX ===
@@ -2591,7 +3225,7 @@ function ouvrirParametresCreneaux() {
 
 function renderParamCreneauxBody() {
   const html = JOURS_ORDER.map(jour => {
-    const slots = getSlotsForJour(jour);
+    const slots = mesSlotsForJour(jour);
     return `<div style="border:1.5px solid var(--bgd);border-radius:12px;padding:14px;margin-bottom:10px;background:${slots.length ? 'var(--vp)' : 'var(--bgc)'}">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${slots.length ? '10px' : '0'}">
         <div style="font-family:'Cormorant Garamond',serif;font-size:17px;font-weight:600;color:var(--v2)">${jour}</div>
@@ -2656,15 +3290,14 @@ function editerSlot(id, defaultJour) {
     if (!newDebut || !newFin) { toast('⚠️ Renseigne les heures'); return; }
     if (newDebut >= newFin) { toast('⚠️ Heure de fin doit être après heure de début'); return; }
     // Check doublon
-    const dup = DATA.creneauxTemplate.find(s => s.jour === newJour && s.nom_slot === newNom && s.id !== id);
+    const dup = DATA.creneauxTemplate.find(s => s.jour === newJour && s.nom_slot === newNom && s.id !== id && !s.salarie_id);
     if (dup) { toast('⚠️ Un créneau "' + newNom + '" existe déjà pour ' + newJour); return; }
     try {
-      const ordreMax = DATA.creneauxTemplate.filter(s => s.jour === newJour).reduce((a, s) => Math.max(a, s.ordre || 0), 0);
+      const ordreMax = DATA.creneauxTemplate.filter(s => s.jour === newJour && !s.salarie_id).reduce((a, s) => Math.max(a, s.ordre || 0), 0);
       if (id) {
-        const { error } = await sb.from('creneaux_template').update({
+        await writeVerified(() => sb.from('creneaux_template').update({
           jour: newJour, nom_slot: newNom, heure_debut: newDebut, heure_fin: newFin
-        }).eq('id', id);
-        if (error) throw error;
+        }).eq('id', id).select('id'));
         const t = DATA.creneauxTemplate.find(s => s.id === id);
         if (t) { t.jour = newJour; t.nom_slot = newNom; t.heure_debut = newDebut; t.heure_fin = newFin; }
       } else {
@@ -2678,7 +3311,7 @@ function editerSlot(id, defaultJour) {
       pop.remove();
       renderParamCreneauxBody();
       renderCreneaux();
-    } catch (e) { toast('Erreur: ' + (e.message || e)); }
+    } catch (e) { toast('⚠️ ' + msgErr(e)); }
   });
 }
 
@@ -2687,13 +3320,12 @@ async function supprimerSlot(id) {
   if (!slot) return;
   if (!confirm(`Supprimer le créneau "${slot.nom_slot}" du ${slot.jour} ?`)) return;
   try {
-    const { error } = await sb.from('creneaux_template').delete().eq('id', id);
-    if (error) throw error;
+    await writeVerified(() => sb.from('creneaux_template').delete().eq('id', id).select('id'));
     DATA.creneauxTemplate = DATA.creneauxTemplate.filter(s => s.id !== id);
     toast('🗑️ Créneau supprimé');
     renderParamCreneauxBody();
     renderCreneaux();
-  } catch (e) { toast('Erreur: ' + (e.message || e)); }
+  } catch (e) { toast('⚠️ ' + msgErr(e)); }
 }
 
 // --- ARIA ---
@@ -2713,7 +3345,7 @@ function buildAriaSys() {
   const recFmt = DATA.recettes.map(r => {
     const ings = DATA.ri.filter(x => x.recette_id === r.id).map(x => {
       const ing = DATA.ingredients.find(i => i.id === x.ingredient_id);
-      const u = ing && ing.unite_par_defaut !== 'Unité par défaut' ? (ing.unite_par_defaut || '') : '';
+      const u = riUnite(x, ing);
       return `${ing ? ing.nom : '?'}${x.quantite_par_portion ? ` (${x.quantite_par_portion}${u ? ' ' + u : ''})` : ''}`;
     });
     return { nom: r.nom_du_plat, cat: catsOf(r).join(', '), actif: r.active, frigo: r.frigo_en_jours, prep: r.instructions_preparation || '', rech: r.instructions_rechauffage || '', cong: r.congelation || '', ings };
@@ -2793,8 +3425,9 @@ async function sendAria() {
   inp.value = ''; ariaBusy = true; $('aSend').disabled = true;
   addAriaMsg('user', msg); ariaConv.push({ role: 'user', content: msg }); addTypingAria();
   try {
+    const { data: { session } } = await sbAuth.auth.getSession();
     const r = await fetch('/.netlify/functions/claude', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (session?.access_token || '') },
       body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 900, system: ariaSys, messages: ariaConv })
     });
     const d = await r.json();

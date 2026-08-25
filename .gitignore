@@ -29,3 +29,9 @@ node_modules/
 
 # Tests / debug
 .netlify/
+
+# Repere local "quelle app" (note interne, ne pas publier)
+_LISEZMOI-QUELLE-APP.txt
+
+# Doc interne de reprise — NE JAMAIS publier (contient IDs/infos sensibles)
+HANDOFF.md

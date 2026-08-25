@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Notice — my batch</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23FAF6EE'/%3E%3Ctext x='3' y='25' font-family='Inter,sans-serif' font-weight='800' font-size='24' fill='%231A1A1A' letter-spacing='-1.5'%3Emb%3C/text%3E%3Ccircle cx='26' cy='22' r='3.2' fill='%23E8843D'/%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  :root{--green:#3D6B4F;--green-3:#264935;--green-pale:#EEF4F0;--orange:#E8843D;--orange-2:#C26821;--orange-pale:#FBE9D5;--ink:#1A1A1A;--tx:#3a3a34;--muted:#8a8578;--cream:#FAF6EE;--line:#EAE3D6}
+  @page{size:A4;margin:16mm 15mm 14mm}
+  html,body{font-family:'Inter',sans-serif;color:var(--tx);line-height:1.55;background:var(--cream)}
+  .sheet{max-width:820px;margin:0 auto;background:#fff;padding:34px 30px;min-height:100vh}
+  @media(min-width:900px){.sheet{margin:28px auto;min-height:0;border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,.06)}}
+  body{font-size:14.5px}
+  .serif{font-family:'Playfair Display',serif}
+
+  header.doc{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid var(--green);padding-bottom:14px;margin-bottom:24px;flex-wrap:wrap;gap:8px}
+  .logo{font-size:28px;font-weight:800;letter-spacing:-.03em;color:var(--ink)}
+  .logo .dot{color:var(--orange)}
+  .doc-title{font-family:'Playfair Display',serif;font-size:22px;color:var(--green-3);font-weight:700}
+
+  .intro{background:var(--green-pale);border-radius:12px;padding:16px 20px;margin-bottom:24px;color:var(--green-3)}
+  .intro b{color:var(--green-3)}
+
+  h2{font-family:'Playfair Display',serif;font-size:19px;color:var(--ink);margin:26px 0 11px;padding-top:10px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px}
+  h2 .sub{font-size:13px;color:var(--muted);font-weight:400;font-family:'Inter',sans-serif}
+  h2 .n{background:var(--orange);color:#fff;width:28px;height:28px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-family:'Inter',sans-serif;font-weight:800;font-size:14px;flex-shrink:0}
+  p{margin-bottom:8px}
+  ul{list-style:none;margin:6px 0 12px}
+  li{position:relative;padding-left:20px;margin-bottom:6px}
+  li::before{content:"›";position:absolute;left:2px;color:var(--orange);font-weight:800}
+  b,strong{color:var(--ink)}
+  .tag{display:inline-block;background:var(--orange-pale);color:var(--orange-2);border-radius:5px;padding:1px 7px;font-weight:600;font-size:12.5px}
+  .tip{background:var(--cream);border-left:3px solid var(--orange);border-radius:0 8px 8px 0;padding:11px 15px;margin:10px 0 14px;font-size:13.5px}
+  .tip b{color:var(--orange-2)}
+  .foot{margin-top:30px;border-top:1px solid var(--line);padding-top:14px;font-size:12.5px;color:var(--muted);text-align:center}
+  a{color:var(--orange-2);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<header class="doc">
+  <div class="logo">my batch<span class="dot">.</span></div>
+  <div class="doc-title">Guide de prise en main</div>
+</header>
+
+<div class="intro">
+  Bienvenue ! 🎉 <b>my batch</b> réunit toute votre activité de batchcookeuse au même endroit : clientes, recettes, courses, planning et créneaux. Cette notice vous accompagne pas à pas. En 20 minutes, votre espace est prêt à recevoir des commandes.
+</div>
+
+<section>
+<h2><span class="n">1</span> Personnaliser mon espace <span class="sub">· onglet ⚙️ Paramètres</span></h2>
+<ul>
+  <li><b>Nom de ma marque</b> + <b>logo</b> : ils apparaissent sur votre espace et sur celui de vos clientes.</li>
+  <li><b>Mes couleurs</b> : couleur principale, secondaire et barre du haut — votre univers, à vous.</li>
+  <li><b>Montant client par défaut</b> et <b>instructions de paiement</b> (Abby / URSSAF / virement… le texte libre que verront vos clientes après commande).</li>
+  <li><b>🔥 Max de plats au four par commande</b> : limite le nombre de plats nécessitant le four dans une même commande, pour tenir les temps de cuisson. Laissez vide = aucune limite.</li>
+  <li><b>💶 Afficher le crédit d'impôt (−50%)</b> : si vos prestations ouvrent droit au crédit d'impôt « services à la personne », activez cette option. Vos clientes verront alors « Prestation X€ » puis « À votre charge ≈ X/2 € après crédit d'impôt ». Le montant enregistré côté gestion reste le prix plein.</li>
+  <li><b>Email & mot de passe</b> de connexion : modifiables ici à tout moment.</li>
+</ul>
+</section>
+
+<section>
+<h2><span class="n">2</span> Créer mes forfaits <span class="sub">· Paramètres → Mes forfaits</span></h2>
+<p>Définissez vos offres (ex. « Semaine », « Semaine + courses »). Vos clientes en choisiront une au moment de commander, et le prix de la commande en découle.</p>
+<ul>
+  <li>Nom, prix, description (visible cliente), badge (ex. « Meilleure offre »).</li>
+  <li><b>Composition de la formule</b> : indiquez combien de plats de chaque <b>type</b> elle contient — <b>entrées 🥗</b>, <b>plats 🍽️</b>, <b>desserts 🍰</b>, <b>petits plus ➕</b>. Ex. « 1 entrée + 1 plat + 1 dessert », ou tout simplement « 5 plats ». La cliente devra composer sa commande <b>exactement</b> selon ce que vous avez défini.</li>
+  <li>Option <b>« inclut les courses »</b> : si cochée, la cliente ne voit pas la liste de courses (c'est vous qui shoppez) et un badge 🛒 apparaît sur la commande.</li>
+  <li>Si le <b>crédit d'impôt</b> est activé (Paramètres), le prix affiché à la cliente indique aussi le <b>reste à charge après crédit d'impôt (≈ 50%)</b>.</li>
+</ul>
+<div class="tip"><b>Nouveau :</b> laissez la composition sur « plats » uniquement pour garder le fonctionnement classique, ou mélangez les types pour proposer de vraies formules entrée / plat / dessert.</div>
+<div class="tip"><b>Astuce :</b> sans forfait, vos clientes ne peuvent pas commander. Créez-en au moins un pour démarrer.</div>
+</section>
+
+<section>
+<h2><span class="n">3</span> Mes recettes & ingrédients <span class="sub">· onglets 🍽️ Recettes / 🥕 Ingrédients</span></h2>
+<ul>
+  <li>Vous démarrez avec <b>30 recettes</b> et <b>120 ingrédients</b> déjà prêts.</li>
+  <li><b>+ Nouvelle recette</b> : photo, <b>type</b> (entrée 🥗 / plat 🍽️ / dessert 🍰 / petit plus ➕), ingrédients & quantités, instructions, conservation (frigo / congélation), catégories (Sans porc, Sans gluten, Sans lactose, Sucré, Tartes, Cakes…), et la case <b>🔥 « va au four »</b> si le plat nécessite le four (elle compte dans la limite définie en Paramètres).</li>
+  <li><b>Unité par recette</b> : l'unité de chaque ingrédient (g, mL, c. à café, pièce…) se règle <b>recette par recette</b>. Changer l'unité d'un ingrédient dans une recette ne modifie <b>que cette recette</b>, pas les autres.</li>
+  <li><b>Quantités fixes</b> (case de la recette) : par défaut, les quantités d'ingrédients sont <b>multipliées par le nombre de portions</b> de la commande. Cochez <b>« quantités fixes »</b> pour les recettes dont la quantité ne dépend pas des portions — typiquement les <b>gâteaux, tartes et cakes</b> (un moule reste un moule).</li>
+  <li>Le <b>type</b> détermine dans quelle « case » de la formule la recette entre : si votre forfait demande 1 dessert, la cliente choisit parmi vos recettes de type <b>dessert</b>. (Une recette sans type précisé compte comme un <b>plat</b>.)</li>
+  <li><b>Statut d'une recette</b> : cliquez sur le badge pour basculer <span class="tag">✓ Actif</span> <span class="tag">⏳ À venir</span> <span class="tag">✗ Inactif</span>. Seules les recettes <b>Actives</b> sont visibles/commandables par vos clientes.</li>
+</ul>
+</section>
+
+<section>
+<h2><span class="n">4</span> Mes créneaux <span class="sub">· onglet 🕐 Créneaux</span></h2>
+<ul>
+  <li>Définissez vos <b>créneaux récurrents</b> (jour + horaire) : ce sont les moments où vous intervenez.</li>
+  <li>Vous pouvez <b>ouvrir/fermer</b> un créneau pour une semaine précise. Un créneau fermé n'apparaît pas côté cliente.</li>
+</ul>
+</section>
+
+<section>
+<h2><span class="n">5</span> Ajouter mes clientes <span class="sub">· onglet 👥 Clients</span></h2>
+<ul>
+  <li><b>+ Nouveau client</b> : nom, email, téléphone, adresse, nombre de portions par défaut.</li>
+  <li><b>Mot de passe portail</b> : c'est le mot de passe que votre cliente utilisera pour se connecter à SON espace. Communiquez-lui son email + ce mot de passe.</li>
+  <li><b>Où se connecte-t-elle ?</b> À la même adresse que vous : <b>app.mybatch.cooking</b>. Donnez-lui ce lien + son email + son mot de passe — c'est tout.</li>
+  <li><b>Mot de passe oublié ?</b> Votre cliente (comme vous) peut le réinitialiser elle-même depuis l'écran de connexion, via le lien <b>« Mot de passe oublié »</b> — un email de réinitialisation lui est envoyé.</li>
+</ul>
+<div class="tip"><b>Bon à savoir :</b> vos clientes n'ont RIEN à installer ni à créer. Elles vont sur <b>app.mybatch.cooking</b>, se connectent avec les identifiants que vous leur donnez, et peuvent ajouter l'app à leur écran d'accueil en un geste.</div>
+</section>
+
+<section>
+<h2><span class="n">6</span> Le planning : gérer les commandes <span class="sub">· onglet 📅 Planning</span></h2>
+<p>Le cœur de l'app. Vue <b>Liste hebdo</b> ou <b>Calendrier mensuel</b>.</p>
+<ul>
+  <li>Chaque commande affiche la cliente, le créneau, les plats, l'adresse et le téléphone.</li>
+  <li><b>Statut</b> : cliquez le badge pour passer de <span class="tag">⏳ À confirmer</span> à <span class="tag">✓ Confirmée</span>. Au passage en « Confirmée », votre cliente reçoit une notification 🎉 et la commande compte dans votre chiffre d'affaires.</li>
+  <li><b>🛒</b> génère la liste de courses · <b>✏️ Modifier</b> · <b>🗑️</b> supprime.</li>
+  <li>Si une cliente laisse un <b>message</b>, un bouton <b>↩️ Répondre</b> apparaît (elle reçoit votre réponse dans sa cloche 🔔).</li>
+</ul>
+</section>
+
+<section>
+<h2><span class="n">7</span> Le portail de mes clientes</h2>
+<p>Ce que voient vos clientes une fois connectées :</p>
+<ul>
+  <li>Elles <b>passent commande</b> : choisissent leur créneau, puis <b>composent leur formule</b> en sélectionnant le bon nombre de plats de chaque type. L'app les guide et empêche de valider tant que la composition n'est pas complète.</li>
+  <li>Un badge <b>🔥 Four</b> apparaît sur les plats qui vont au four ; si vous avez fixé un maximum, la cliente est avertie quand elle en sélectionne trop.</li>
+  <li>Au récapitulatif, elles voient le prix — et le <b>reste à charge après crédit d'impôt</b> si vous avez activé l'option.</li>
+  <li>Elles peuvent laisser un <b>message</b> (allergies, demande spéciale).</li>
+  <li>Elles suivent leurs commandes, leur <b>liste de courses</b> et les conseils de réchauffage, et reçoivent vos <b>notifications</b> 🔔.</li>
+</ul>
+</section>
+
+<section>
+<h2><span class="n">8</span> Mes statistiques <span class="sub">· onglet 📊 Stats</span></h2>
+<ul>
+  <li>Chiffre d'affaires du mois, nombre de commandes, portions à préparer.</li>
+  <li>Top plats commandés et top clientes fidèles.</li>
+</ul>
+</section>
+
+<section>
+<h2><span class="n">9</span> Abonnement, guide & astuces</h2>
+<ul>
+  <li><b>Gérer mon abonnement</b> (Paramètres) : facture, carte, résiliation via l'espace Stripe sécurisé.</li>
+  <li><b>📕 Mon guide</b> (formule annuelle) : téléchargez votre guide complet « Se lancer comme batchcookeuse » directement depuis les Paramètres.</li>
+  <li><b>Installer l'app</b> sur votre téléphone : ouvrez app.mybatch.cooking → menu du navigateur → <b>« Ajouter à l'écran d'accueil »</b>. Vous aurez une vraie icône, en plein écran.</li>
+</ul>
+</section>
+
+<div class="foot">
+  Besoin d'aide ? Écrivez-nous à <a href="mailto:contact@mybatch.cooking">contact@mybatch.cooking</a> · my batch — l'app des batchcookeuses · mybatch.cooking
+</div>
+
+</div>
+</body>
+</html>

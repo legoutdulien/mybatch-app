@@ -109,15 +109,16 @@ exports.handler = async (event) => {
         total = 0;
       }
     } else {
-      // Mensuel
+      // Mensuel — montant reel si defini (deals custom type Estelle 39€), sinon prix standard
+      const montant = (e.abonnement_montant != null && e.abonnement_montant !== '') ? Number(e.abonnement_montant) : PRICE_MENSUEL;
       lines = [{
         desc: 'Abonnement Mensuel my batch',
         sub: 'Période : ' + periodStart.toLocaleDateString('fr-FR') + ' → ' + periodEnd.toLocaleDateString('fr-FR'),
         qty: 1,
-        unit_price: PRICE_MENSUEL,
-        total: PRICE_MENSUEL
+        unit_price: montant,
+        total: montant
       }];
-      total = PRICE_MENSUEL;
+      total = montant;
     }
 
     return {

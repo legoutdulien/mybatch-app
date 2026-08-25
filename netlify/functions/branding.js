@@ -24,7 +24,7 @@ exports.handler = async (event) => {
   try {
     const filter = id ? `id=eq.${id}` : `slug=eq.${encodeURIComponent(slug)}`;
     const r = await fetch(
-      `${url}/rest/v1/entreprises?${filter}&select=id,slug,nom_marque,nom_contact,logo_url,couleur_principale,couleur_secondaire,instructions_paiement,montant_client_default,active`,
+      `${url}/rest/v1/entreprises?${filter}&select=id,slug,nom_marque,nom_contact,logo_url,couleur_principale,couleur_secondaire,instructions_paiement,montant_client_default,max_four_commande,credit_impot_sap,active`,
       { headers: { apikey: key, Authorization: `Bearer ${key}` } }
     );
     const data = await r.json();
@@ -37,7 +37,7 @@ exports.handler = async (event) => {
     }
     return {
       statusCode: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=300' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=30' },
       body: JSON.stringify({
         id: ent.id,
         slug: ent.slug,
@@ -47,7 +47,9 @@ exports.handler = async (event) => {
         couleur_principale: ent.couleur_principale,
         couleur_secondaire: ent.couleur_secondaire,
         instructions_paiement: ent.instructions_paiement,
-        montant_client_default: ent.montant_client_default
+        montant_client_default: ent.montant_client_default,
+        max_four_commande: ent.max_four_commande,
+        credit_impot_sap: ent.credit_impot_sap
       })
     };
   } catch (e) {

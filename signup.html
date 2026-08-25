@@ -61,6 +61,11 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--i
 .field input:focus{border-color:var(--orange)}
 .field .hint{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.4}
 .field .hint code{background:var(--bg);padding:1px 6px;border-radius:4px;font-size:11px;color:var(--ink)}
+.pw-wrap{position:relative}
+.pw-wrap input{padding-right:46px}
+.pw-toggle{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:none;background:none;cursor:pointer;padding:6px;color:var(--muted);opacity:.7;border-radius:8px;display:inline-flex;align-items:center;justify-content:center}
+.pw-toggle:hover{opacity:1;color:var(--ink)}
+.pw-toggle svg{width:20px;height:20px;display:block}
 
 .cb-row{display:flex;align-items:flex-start;gap:10px;padding:14px;background:var(--bg);border-radius:10px;margin-top:14px;cursor:pointer;width:100%}
 .cb-row input[type="checkbox"]{width:18px;height:18px;margin-top:1px;flex-shrink:0;accent-color:var(--orange);cursor:pointer}
@@ -172,7 +177,10 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--i
 
       <div class="field">
         <label for="password">Mot de passe *</label>
-        <input type="password" id="password" autocomplete="new-password" placeholder="Au moins 8 caractères">
+        <div class="pw-wrap">
+          <input type="password" id="password" autocomplete="new-password" placeholder="Au moins 8 caractères">
+          <button type="button" class="pw-toggle" id="pwToggle" aria-label="Afficher le mot de passe"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
       </div>
 
       <label class="cb-row">
@@ -210,10 +218,68 @@ function selectPlan(name) {
 }
 window.selectPlan = selectPlan;
 
+// Arrivee depuis la page Reseau privee : ?plan=reseau_starter|reseau_pro|reseau_illimite
+const RESEAU_INFO = {
+  reseau_starter: { nom: 'Réseau Starter', prix: '149 €', cap: 'Jusqu\'à 3 cuisinières · seule la tête paie' },
+  reseau_pro:     { nom: 'Réseau Pro',     prix: '279 €', cap: 'Jusqu\'à 8 cuisinières · seule la tête paie' }
+};
+let _forcedPlan = (function () {
+  const p = new URLSearchParams(location.search).get('plan');
+  return (p === 'reseau_starter' || p === 'reseau_pro' || p === 'reseau_illimite') ? p : null;
+})();
+
+// Illimite : 279 EUR (base, jusqu'a 8) + 30 EUR par cuisiniere au-dela de 8
+function illimitePrix(n) { n = Math.max(9, parseInt(n, 10) || 9); return 279 + 30 * (n - 8); }
+function nbCuisinieres() { const el = $('nbCuis'); return el ? Math.min(200, Math.max(9, parseInt(el.value, 10) || 9)) : 9; }
+
 function selectedPlan() {
+  if (_forcedPlan) return _forcedPlan;
   const r = document.querySelector('input[name="plan"]:checked');
   return r ? r.value : 'annuel';
 }
+
+// Plan reseau force : masque le choix mensuel/annuel et affiche un recap reseau
+(function initReseau() {
+  if (!_forcedPlan) return;
+  document.querySelectorAll('.pricing-col .plan').forEach(el => { el.style.display = 'none'; });
+  const h1 = document.querySelector('.pricing-col h1'); if (h1) h1.innerHTML = 'Créez votre <span class="accent">réseau.</span>';
+  const sub = document.querySelector('.pricing-col .sub'); if (sub) sub.textContent = 'Essai gratuit 7 jours. Seul le compte principal est facturé, vos cuisinières accèdent gratuitement. Installation et import offerts.';
+  const col = document.querySelector('.pricing-col');
+  const anchor = document.querySelector('.pricing-col .assurances');
+  const card = document.createElement('div');
+  card.className = 'plan featured on';
+  card.style.cursor = 'default';
+
+  if (_forcedPlan === 'reseau_illimite') {
+    card.innerHTML =
+      '<div class="plan-head"><span class="plan-name">Réseau Illimité</span><span class="plan-price" id="illimPrice">339 €<small>/mois</small></span></div>'
+      + '<div class="plan-sub">Base 279 € (jusqu\'à 8 cuisinières) + 30 € par cuisinière au-delà.</div>'
+      + '<div style="margin:14px 0 4px;display:flex;align-items:center;gap:10px">'
+      +   '<label for="nbCuis" style="font-size:14px;font-weight:600">Nombre de cuisinières&nbsp;:</label>'
+      +   '<input type="number" id="nbCuis" min="9" max="200" value="10" style="width:82px;padding:8px 10px;border:1.5px solid #e2ddd0;border-radius:8px;font-size:15px;font-weight:600">'
+      + '</div>'
+      + '<div style="font-size:12px;color:#8a8578;margin-bottom:6px">Comptez chaque cuisinière qui aura un accès à l\'app — <strong>vous incluse si vous cuisinez aussi</strong>.</div>'
+      + '<div class="plan-sub" id="illimDetail">10 cuisinières → 339 €/mois</div>'
+      + '<ul><li>Vos cuisinières en partenaires</li><li>Plafonds très larges (clientes, commandes)</li><li>Recettes &amp; forfaits partagés</li><li>Accompagnement dédié · Installation offerte</li></ul>';
+  } else {
+    const info = RESEAU_INFO[_forcedPlan];
+    card.innerHTML = '<div class="plan-head"><span class="plan-name">' + info.nom + '</span><span class="plan-price">' + info.prix + '<small>/mois</small></span></div>'
+      + '<div class="plan-sub">' + info.cap + '</div>'
+      + '<ul><li>Vos cuisinières en partenaires</li><li>Plafonds relevés (clientes, commandes)</li><li>Recettes &amp; forfaits partagés</li><li>Installation &amp; import offerts</li></ul>';
+  }
+  if (col) col.insertBefore(card, anchor || null);
+
+  if (_forcedPlan === 'reseau_illimite') {
+    const upd = () => {
+      const n = nbCuisinieres();
+      const p = illimitePrix(n);
+      const pe = $('illimPrice'); if (pe) pe.innerHTML = p + ' €<small>/mois</small>';
+      const de = $('illimDetail'); if (de) de.textContent = n + ' cuisinières → ' + p + ' €/mois';
+    };
+    const el = $('nbCuis'); if (el) el.addEventListener('input', upd);
+    upd();
+  }
+})();
 
 function updateRenonceVisibility() {
   // Renonciation visible seulement pour annuel (guide inclus)
@@ -241,6 +307,15 @@ $('slug').addEventListener('input', e => {
   e.target.value = slugify(e.target.value);
   $('slugPreview').textContent = e.target.value || 'votre-slug';
 });
+const PW_EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+const PW_EYE_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+$('pwToggle').addEventListener('click', function () {
+  const p = $('password');
+  const show = p.type === 'password';
+  p.type = show ? 'text' : 'password';
+  this.innerHTML = show ? PW_EYE_OFF : PW_EYE;
+  this.setAttribute('aria-label', show ? 'Masquer le mot de passe' : 'Afficher le mot de passe');
+});
 
 function showErr(msg) {
   const el = $('errBox');
@@ -260,6 +335,7 @@ $('btnSignup').addEventListener('click', async () => {
     cgu: $('cgu').checked,
     renonce_retractation: $('renonce').checked && selectedPlan() === 'annuel'
   };
+  if (data.plan === 'reseau_illimite') data.nb_cuisinieres = nbCuisinieres();
 
   // Validation
   if (!data.nom_marque) return showErr('Le nom de votre activité est requis.');

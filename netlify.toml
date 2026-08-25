@@ -8,3 +8,22 @@
     X-Frame-Options = "SAMEORIGIN"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Documents internes (presents dans le repo pour la reprise) -> JAMAIS servis publiquement.
+[[redirects]]
+  from = "/HANDOFF.md"
+  to = "/404.html"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/_LISEZMOI-QUELLE-APP.txt"
+  to = "/404.html"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/MIGRATION_MYBATCH.md"
+  to = "/404.html"
+  status = 404
+  force = true

@@ -3,6 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="/manifest-admin.json">
+<meta name="theme-color" content="#FAF6EE">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="my batch">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<script>if('serviceWorker' in navigator){addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){})})}</script>
 <title>Mon espace Batchcooking · Admin</title>
 <link rel="apple-touch-icon" href="https://res.cloudinary.com/dgoqyp3wn/image/upload/v1774719838/ChatGPT_Image_28_mars_2026_18_37_48_u200aw.png">
 <link rel="icon" type="image/png" href="https://res.cloudinary.com/dgoqyp3wn/image/upload/v1774719838/ChatGPT_Image_28_mars_2026_18_37_48_u200aw.png">
@@ -41,13 +48,13 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);heigh
 .topbar{background:var(--topbar-bg, var(--n1));height:56px;padding:0 28px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;border-bottom:1px solid rgba(255,255,255,.05)}
 .brand{display:flex;align-items:center;gap:12px}
 .brand-icon{width:30px;height:30px;background:linear-gradient(135deg,var(--v2),var(--v3));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px}
-.brand-name{font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:300;color:#fff;letter-spacing:1.5px}
-.brand-sep{color:rgba(255,255,255,.15);margin:0 2px}
-.brand-sub{font-size:11px;color:rgba(255,255,255,.3);font-family:'DM Sans',sans-serif;letter-spacing:.5px}
+.brand-name{font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:300;color:var(--topbar-fg,#fff);letter-spacing:1.5px}
+.brand-sep{color:color-mix(in srgb,var(--topbar-fg,#fff) 22%,transparent);margin:0 2px}
+.brand-sub{font-size:11px;color:color-mix(in srgb,var(--topbar-fg,#fff) 50%,transparent);font-family:'DM Sans',sans-serif;letter-spacing:.5px}
 .top-right{display:flex;align-items:center;gap:10px}
-.top-stat{font-size:11px;color:rgba(255,255,255,.3);padding:5px 10px;background:rgba(255,255,255,.05);border-radius:6px;border:1px solid rgba(255,255,255,.07)}
-.tbtn{padding:7px 14px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);border-radius:8px;font-size:12px;color:rgba(255,255,255,.5);cursor:pointer;font-family:'DM Sans',sans-serif;transition:.2s}
-.tbtn:hover{color:#fff;background:rgba(255,255,255,.13)}
+.top-stat{font-size:11px;color:color-mix(in srgb,var(--topbar-fg,#fff) 60%,transparent);padding:5px 10px;background:color-mix(in srgb,var(--topbar-fg,#fff) 8%,transparent);border-radius:6px;border:1px solid color-mix(in srgb,var(--topbar-fg,#fff) 14%,transparent)}
+.tbtn{padding:7px 14px;background:color-mix(in srgb,var(--topbar-fg,#fff) 12%,transparent);border:1px solid color-mix(in srgb,var(--topbar-fg,#fff) 22%,transparent);border-radius:8px;font-size:12px;color:var(--topbar-fg,#fff);cursor:pointer;font-family:'DM Sans',sans-serif;transition:.2s}
+.tbtn:hover{color:var(--topbar-fg,#fff);background:color-mix(in srgb,var(--topbar-fg,#fff) 22%,transparent)}
 .tabs{background:var(--wh);border-bottom:1.5px solid var(--bgd);padding:0 24px;display:flex;gap:2px;flex-shrink:0;overflow-x:auto}
 .tabs::-webkit-scrollbar{height:0}
 .tab{padding:14px 18px;font-size:13px;cursor:pointer;border-bottom:2px solid transparent;color:var(--txl);transition:.2s;white-space:nowrap;display:flex;align-items:center;gap:6px;font-weight:400}
@@ -70,16 +77,21 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);heigh
 .cmd-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--v3)}
 .cmd-card:hover{border-color:var(--vl);box-shadow:var(--sh)}
 .cmd-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
-.cmd-client{font-weight:600;font-size:15px;color:var(--tx);margin-bottom:3px}
-.cmd-meta{font-size:12px;color:var(--txl);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.cmd-client{font-weight:600;font-size:15px;color:var(--tx);margin-bottom:9px;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;text-align:center;gap:8px}
+.cmd-meta{font-size:12px;color:var(--txl);display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap}
 .cmd-meta-item{display:flex;align-items:center;gap:4px}
-.cmd-actions{display:flex;gap:6px;align-items:flex-start;flex-shrink:0}
-.cmd-plats{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
+.cmd-logi{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:7px 14px;font-size:12px;color:var(--txl);margin-bottom:9px}
+.cmd-addr{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-align:center;font-size:12px;color:var(--txl);text-decoration:none;line-height:1.4;margin-bottom:6px}
+.cmd-addr:hover{color:var(--v2)}
+.cmd-phone{display:block;text-align:center;font-size:12.5px;color:var(--txl);text-decoration:none;margin-bottom:2px;font-weight:500}
+.cmd-phone:hover{color:var(--v2)}
+.cmd-actions{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:12px}
+.cmd-plats{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px;justify-content:center}
 .plat-chip{padding:4px 12px;background:var(--vp);border-radius:20px;font-size:12px;color:var(--v2);cursor:pointer;border:1px solid var(--vl);transition:.15s;font-weight:400}
 .plat-chip:hover{background:var(--vl);transform:translateY(-1px)}
 .cmd-footer{margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-top:10px;border-top:1px solid var(--bgd)}
 .assign-sel{padding:6px 10px;border:1.5px solid var(--bgd);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:12px;background:var(--wh);color:var(--tx);outline:none;cursor:pointer}
-.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;white-space:nowrap}
 .badge::before{content:'';width:5px;height:5px;border-radius:50%}
 .b-ok{background:#e8f5e9;color:#2e7d32}.b-ok::before{background:#2e7d32}
 .b-en{background:#fff8e1;color:#f57f17}.b-en::before{background:#f57f17}
@@ -176,14 +188,18 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);heigh
 .spin{width:36px;height:36px;border:3px solid var(--bgd);border-top-color:var(--v3);border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 /* === Plan gating : tout ce qui suit est masque pour les comptes non-founder === */
-body.plan-standard #ariaFab,
-body.plan-standard #ariaPanel,
+/* ARIA est desormais disponible a toutes les formules payantes, pas juste founder */
 body.plan-standard [data-tab="salaries"],
 body.plan-standard [data-tab="entreprises"],
 body.plan-standard #stats-six-month,
 body.plan-standard #stats-charge-prev,
 body.plan-standard .founder-only{display:none !important}
 body.plan-standard option.founder-only-opt{display:none}
+/* Reseau : garde le superadmin masque (onglet Entreprises, ARIA) mais REAFFICHE l'onglet Partenaires */
+body.plan-reseau [data-tab="salaries"]{display:flex !important}
+/* Champs reservees aux comptes reseau (ex: attribution cliente -> cuisiniere) */
+.reseau-only{display:none}
+body.plan-reseau .reseau-only{display:block}
 #ariaChat{flex:1;display:none;flex-direction:column;min-height:0;overflow:hidden}
 .a-msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
 .a-msgs::-webkit-scrollbar{width:3px}
@@ -238,16 +254,20 @@ body.plan-standard option.founder-only-opt{display:none}
   .topbar{padding:0 14px;height:50px}
   .top-stat{display:none}
   .tbtn{padding:6px 10px;font-size:11px}
-  .tabs{padding:0 4px;gap:0}
-  .tab{padding:10px 8px;font-size:11px;gap:3px;flex:1;justify-content:center;text-align:center}
-  .tab-label{display:none}
-  .content{padding:12px}
+  /* Barre de navigation en bas facon appli native */
+  .tabs{position:fixed;bottom:0;left:0;right:0;z-index:200;background:var(--wh);border-top:1.5px solid var(--bgd);border-bottom:none;padding:5px 2px;padding-bottom:calc(5px + env(safe-area-inset-bottom,0px));gap:0;box-shadow:0 -3px 18px rgba(0,0,0,.07)}
+  .tab{flex:1;min-width:0;flex-direction:column;align-items:center;justify-content:flex-start;gap:3px;padding:5px 2px 3px;font-size:20px;line-height:1;border-bottom:none;color:var(--txl)}
+  .tab-label{display:block;font-size:8.5px;font-weight:500;line-height:1.1;letter-spacing:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tab.active{color:var(--v2)}
+  .tab.active .tab-label{font-weight:600}
+  .content{padding:12px 12px 78px}
   .stats-row{grid-template-columns:repeat(2,1fr);gap:8px}
   .stat-card{padding:14px}
   .stat-val{font-size:26px}
-  .cmd-card{padding:12px 14px}
-  .cmd-client{font-size:14px}
-  .cmd-meta{gap:6px;font-size:11px}
+  .cmd-card{padding:14px 16px}
+  .cmd-client{font-size:14.5px}
+  /* Infos commande : liste verticale reguliere (au lieu d'un empilement en vrac) */
+  .cmd-meta{gap:8px 12px;font-size:12px;margin-top:6px}
   .cmd-actions{flex-direction:row}
   .btn-sm{padding:6px 8px;font-size:11px}
   .rec-grid{grid-template-columns:repeat(2,1fr);gap:10px}
@@ -261,13 +281,21 @@ body.plan-standard option.founder-only-opt{display:none}
   .ing-cols{grid-template-columns:1fr 60px 65px 28px;gap:4px}
   .ing-inp{padding:6px 8px;font-size:11px}
   .aria-panel{width:100vw;right:-100vw}
-  .aria-fab{bottom:20px;right:16px;width:50px;height:50px;font-size:20px}
+  .aria-fab{bottom:84px;right:16px;width:50px;height:50px;font-size:20px}
   .snav{padding:6px 10px}
   .snav-label{font-size:12px}
   .plat-grid{grid-template-columns:repeat(2,1fr)}
   .card{padding:16px}
   .card-head{gap:8px}
   .card-tit{font-size:18px}
+  /* Calendrier mensuel : version compacte "pastilles" (les noms en toutes lettres sont illisibles sur tel) */
+  .cal-head{gap:2px;margin-bottom:2px}
+  .cal-dh{font-size:9px;padding:3px 0;letter-spacing:0}
+  .cal-grid{gap:2px}
+  .cal-day{padding:4px 3px;min-height:46px;border-radius:8px;border-width:1px}
+  .cal-num{font-size:11px;margin-bottom:3px}
+  .cal-evt{font-size:0;line-height:0;padding:0;margin:1px;width:6px;height:6px;min-width:6px;border-radius:50%;display:inline-block;vertical-align:top}
+  .cal-day.has-cmd{position:relative}
 }
 @media(max-width:480px){
   .cren-grid{grid-template-columns:1fr 1fr}
@@ -278,6 +306,17 @@ body.plan-standard option.founder-only-opt{display:none}
 .tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
 @media(max-width:600px){
   .tbl{min-width:500px}
+  /* Tableaux en cartes empilees sur mobile (plus de scroll horizontal) */
+  .tbl-cards{min-width:0;width:100%}
+  .tbl-cards thead{display:none}
+  .tbl-cards, .tbl-cards tbody, .tbl-cards tr, .tbl-cards td{display:block;width:auto}
+  .tbl-cards tr{background:var(--bgc);border:1.5px solid var(--bgd);border-radius:14px;padding:12px 14px;margin-bottom:10px}
+  .tbl-cards td{border:none;padding:5px 0;font-size:13px;white-space:normal!important;max-width:none!important;overflow:visible!important;text-overflow:clip!important}
+  .tbl-cards td::before{content:attr(data-label);display:block;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--txl);font-weight:600;margin-bottom:2px}
+  .tbl-cards td:first-child{padding-top:0}
+  .tbl-cards td:first-child::before{display:none}
+  .tbl-cards td[data-label="Action"]{padding-top:10px;margin-top:6px;border-top:1px solid var(--bgd);gap:8px}
+  .tbl-cards td[data-label="Action"]::before{display:none}
 }
 @keyframes fadeInUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
 @keyframes scaleIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
@@ -403,6 +442,14 @@ body.plan-standard option.founder-only-opt{display:none}
     </div>
     <div class="form-grid">
       <div class="fg"><label>Nom du plat *</label><input id="rNom" type="text" placeholder="Ex: Ratatouille provencale"></div>
+      <div class="fg"><label>Type</label>
+        <select id="rType">
+          <option value="entree">🥗 Entrée</option>
+          <option value="plat" selected>🍽️ Plat</option>
+          <option value="dessert">🍰 Dessert</option>
+          <option value="petit_plus">➕ Petit plus</option>
+        </select>
+      </div>
       <div class="fg" style="grid-column:1/-1"><label>Catégories (une ou plusieurs)</label>
         <div id="rCats" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px"></div>
       </div>
@@ -410,7 +457,7 @@ body.plan-standard option.founder-only-opt{display:none}
       <div class="fg"><label>Statut</label>
         <select id="rEtat">
           <option value="actif">✓ Actif (visible et commandable)</option>
-          <option value="a_venir" class="founder-only-opt">⏳ À venir (avant-première client)</option>
+          <option value="a_venir">⏳ À venir (avant-première client)</option>
           <option value="en_stock" class="founder-only-opt">📦 En stock (réserve admin, invisible client)</option>
           <option value="inactif">✗ Inactif (cache totalement)</option>
         </select>
@@ -418,6 +465,8 @@ body.plan-standard option.founder-only-opt{display:none}
       <div class="fg" style="grid-column:1/-1"><label>Instructions preparation</label><textarea id="rPrep" rows="3" placeholder="Etapes de preparation pour les salaries..."></textarea></div>
       <div class="fg" style="grid-column:1/-1"><label>Instructions rechauffage</label><textarea id="rRechauffage" rows="2" placeholder="Comment rechauffer ce plat..."></textarea></div>
       <div class="fg" style="grid-column:1/-1"><label>Congelation</label><input id="rCongelation" type="text" placeholder="Ex: Se congele 3 mois"></div>
+      <div class="fg" style="grid-column:1/-1"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal"><input id="rFour" type="checkbox" style="width:auto;margin:0"> 🔥 Ce plat va au four (compte dans la limite de plats au four par commande)</label></div>
+      <div class="fg" style="grid-column:1/-1"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal"><input id="rQtyFixe" type="checkbox" style="width:auto;margin:0"> 🍰 Quantités fixes (gâteaux, desserts…) — les quantités NE sont PAS multipliées par le nombre de portions de la cliente</label></div>
       <div class="fg" style="grid-column:1/-1">
         <label>Photo du plat</label>
         <div id="photoDropzone" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:14px;border:1.5px dashed var(--bgd);border-radius:12px;transition:border-color .2s,background .2s">
@@ -462,8 +511,9 @@ body.plan-standard option.founder-only-opt{display:none}
       <div class="fg"><label>Nom *</label><input id="cNom" type="text"></div>
       <div class="fg"><label>Email *</label><input id="cEmail" type="email"></div>
       <div class="fg"><label>Telephone</label><input id="cTel" type="tel"></div>
-      <div class="fg"><label>Mot de passe portail</label><input id="cMdp" type="text" placeholder="(laisser vide pour ne pas changer)"></div>
+      <div class="fg"><label>Mot de passe portail</label><input id="cMdp" type="text"><div id="cMdpHelp" style="font-size:11px;color:var(--txl);margin-top:4px"></div></div>
       <div class="fg"><label>Nb portions par défaut</label><input id="cPortions" type="number" min="1" max="20" value="4"></div>
+      <div class="fg reseau-only" style="grid-column:1/-1"><label>Attribuée à</label><select id="cAssigne"></select><div style="font-size:11px;color:var(--txl);margin-top:4px">La cuisinière qui gère cette cliente. Ses commandes lui arriveront directement, et elle verra les créneaux de cette cuisinière.</div></div>
       <div class="fg" style="grid-column:1/-1"><label>Adresse</label><input id="cAdresse" type="text"></div>
       <div class="fg" style="grid-column:1/-1"><label>Notes</label><textarea id="cNotes" rows="2" placeholder="Allergies, preferences..."></textarea></div>
     </div>
@@ -509,7 +559,7 @@ body.plan-standard option.founder-only-opt{display:none}
       <div class="fg"><label>Nb portions</label><input type="number" id="cmdPortions" min="1" max="20" value="4" style="max-width:100px"></div>
       <div class="fg"><label>Statut</label>
         <select id="cmdStatut">
-          <option value="En attente de paiement">En attente de paiement</option><option value="Confirmée">Confirmée</option>
+          <option value="En attente de paiement">⏳ À confirmer</option><option value="Confirmée">✓ Confirmée</option>
         </select>
       </div>
     </div>
@@ -552,6 +602,9 @@ body.plan-standard option.founder-only-opt{display:none}
         <select id="entFormule">
           <option value="standard">Standard (79€/mois)</option>
           <option value="premium">Premium (579€/mois — incl. 4h visio)</option>
+          <option value="reseau_starter">Réseau Starter (149€/mois — ≤3 cuisinières)</option>
+          <option value="reseau_pro">Réseau Pro (279€/mois — ≤8 cuisinières)</option>
+          <option value="reseau_illimite">Réseau Illimité (279€ + 30€/cuisinière au-delà de 8)</option>
         </select>
       </div>
       <div class="fg" id="entCycleWrap"><label>Cycle de facturation</label>

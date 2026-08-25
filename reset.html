@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nouveau mot de passe — my batch</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23FAF6EE'/%3E%3Ctext x='3' y='25' font-family='Inter,sans-serif' font-weight='800' font-size='24' fill='%231A1A1A' letter-spacing='-1.5'%3Emb%3C/text%3E%3Ccircle cx='26' cy='22' r='3.2' fill='%23E8843D'/%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{--ink:#1A1A1A;--green:#3D6B4F;--orange:#E8843D;--cream:#FAF6EE;--tx:#3a3a34;--txl:#8a8578;--line:#EAE3D6}
+  body{font-family:'Inter',sans-serif;background:var(--cream);color:var(--tx);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+  .card{background:#fff;border-radius:18px;box-shadow:0 10px 40px rgba(0,0,0,.08);padding:34px 28px;max-width:400px;width:100%;text-align:center}
+  .logo{font-size:28px;font-weight:800;letter-spacing:-.03em;color:var(--ink);margin-bottom:6px}
+  .logo .dot{color:var(--orange)}
+  h1{font-size:19px;color:var(--green);margin:14px 0 8px}
+  p.sub{font-size:13.5px;color:var(--txl);margin-bottom:20px;line-height:1.5}
+  .fg{text-align:left;margin-bottom:14px}
+  label{display:block;font-size:12px;font-weight:600;margin-bottom:5px}
+  input{width:100%;padding:12px 13px;border:1.5px solid var(--line);border-radius:11px;font-family:inherit;font-size:15px;background:#fff}
+  input:focus{outline:none;border-color:var(--green)}
+  button{width:100%;padding:14px;background:var(--green);color:#fff;border:none;border-radius:11px;font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;margin-top:6px;transition:background .15s}
+  button:hover{background:#345e45}
+  button:disabled{opacity:.6;cursor:not-allowed}
+  .msg{font-size:13px;margin-top:14px;min-height:18px}
+  .msg.err{color:#c62828}
+  .msg.ok{color:#2e7d32}
+  a.back{display:inline-block;margin-top:16px;color:var(--orange);font-size:13px;text-decoration:none;font-weight:600}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">my batch<span class="dot">.</span></div>
+  <h1>Nouveau mot de passe</h1>
+  <p class="sub">Choisissez un nouveau mot de passe pour votre espace (8 caractères minimum).</p>
+  <div id="form">
+    <div class="fg"><label>Nouveau mot de passe</label><input type="password" id="pwd" placeholder="••••••••" autocomplete="new-password"></div>
+    <div class="fg"><label>Confirmer le mot de passe</label><input type="password" id="pwd2" placeholder="••••••••" autocomplete="new-password"></div>
+    <button id="btn">Enregistrer</button>
+  </div>
+  <div class="msg" id="msg"></div>
+  <a class="back" href="/">← Retour à la connexion</a>
+</div>
+<script>
+  const params = new URLSearchParams(location.search);
+  const token = params.get('token') || '';
+  const $ = id => document.getElementById(id);
+  const msg = $('msg');
+  function show(t, cls){ msg.textContent = t; msg.className = 'msg ' + (cls || ''); }
+  if (!token) { show('Lien invalide ou incomplet. Redemandez un lien depuis la page de connexion.', 'err'); $('form').style.display = 'none'; }
+  $('btn').addEventListener('click', async () => {
+    const pwd = $('pwd').value, pwd2 = $('pwd2').value;
+    if (pwd.length < 8) return show('Le mot de passe doit faire au moins 8 caractères.', 'err');
+    if (pwd !== pwd2) return show('Les deux mots de passe ne correspondent pas.', 'err');
+    $('btn').disabled = true; $('btn').textContent = 'Enregistrement...'; show('', '');
+    try {
+      const r = await fetch('/.netlify/functions/reset-password', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, password: pwd })
+      });
+      const d = await r.json();
+      if (r.ok && d.ok) {
+        $('form').style.display = 'none';
+        show('✅ Mot de passe modifié ! Vous pouvez maintenant vous connecter.', 'ok');
+        setTimeout(() => { location.href = '/'; }, 2200);
+      } else {
+        show(d.error || 'Une erreur est survenue.', 'err');
+        $('btn').disabled = false; $('btn').textContent = 'Enregistrer';
+      }
+    } catch (e) {
+      show('Erreur réseau, réessayez.', 'err');
+      $('btn').disabled = false; $('btn').textContent = 'Enregistrer';
+    }
+  });
+  $('pwd2').addEventListener('keydown', e => { if (e.key === 'Enter') $('btn').click(); });
+</script>
+</body>
+</html>
