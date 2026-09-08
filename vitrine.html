@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Batchcooking à domicile</title>
+<meta name="description" content="Vos repas de la semaine, faits maison, préparés pour vous. Batch cooking à domicile — service à la personne éligible au crédit d'impôt.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap">
+<style>
+  :root{ --brand:#3d6b4f; --brand2:#e8843d; --brand-d:#2b4d38;
+    --ink:#211f1a; --tx:#514d45; --muted:#8b8578;
+    --cream:#faf7f0; --cream2:#f3eee2; --card:#ffffff; --line:#ece5d6;
+    --shadow:0 1px 2px rgba(30,40,25,.05),0 14px 34px rgba(30,40,25,.07);
+    --shadow-sm:0 1px 2px rgba(30,40,25,.05),0 6px 16px rgba(30,40,25,.05); }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--cream);color:var(--tx);font-family:'Inter',system-ui,sans-serif;line-height:1.65;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 22px}
+  a{color:inherit}
+  h1,h2,h3{text-wrap:balance}
+  /* états */
+  #load,#err{min-height:78vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px;color:var(--muted)}
+  #err{display:none}
+  .spin{width:34px;height:34px;border:3px solid var(--line);border-top-color:var(--brand);border-radius:50%;animation:sp 1s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  #site{display:none}
+  /* apparition douce au chargement, sans dépendre du scroll (robuste + jamais de section vide) */
+  .reveal{animation:rise .7s ease both}
+  @keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){.reveal{animation:none}}
+
+  /* hero */
+  .hero{position:relative;color:#fff;text-align:center;padding:78px 22px 74px;overflow:hidden;background:var(--brand)}
+  .hero .bg{position:absolute;inset:0;background-size:cover;background-position:center;transform:scale(1.05);filter:saturate(1.05)}
+  .hero .veil{position:absolute;inset:0;background:linear-gradient(180deg,color-mix(in srgb,var(--brand-d) 78%,transparent),color-mix(in srgb,var(--brand) 88%,transparent) 60%,var(--brand))}
+  .hero .inner{position:relative;max-width:760px;margin:0 auto}
+  .hero .logo{width:104px;height:104px;border-radius:26px;object-fit:cover;border:4px solid rgba(255,255,255,.35);margin-bottom:20px;background:#fff;box-shadow:0 12px 30px rgba(0,0,0,.22)}
+  .eyebrow{text-transform:uppercase;letter-spacing:.2em;font-size:12px;font-weight:700;opacity:.85;margin-bottom:16px}
+  .hero h1{font-family:'Fraunces',serif;font-weight:600;font-size:clamp(32px,6.4vw,52px);line-height:1.04;letter-spacing:-.015em;margin:0 0 16px}
+  .hero .lede{font-size:clamp(16px,2.4vw,20px);opacity:.95;max-width:44ch;margin:0 auto 26px}
+  .trust{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
+  .trust span{font-size:13px;font-weight:600;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28);border-radius:999px;padding:7px 15px;backdrop-filter:blur(4px)}
+  .hero .scroll{margin-top:30px;font-size:22px;opacity:.7;animation:bob 1.8s ease-in-out infinite}
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(6px)}}
+
+  /* sections */
+  section{padding:64px 0}
+  .stit{font-family:'Fraunces',serif;font-weight:600;font-size:clamp(26px,4.2vw,36px);color:var(--brand);text-align:center;margin:0 0 8px}
+  .ssub{text-align:center;color:var(--muted);max-width:52ch;margin:0 auto 40px;font-size:16px}
+
+  /* c'est quoi */
+  .alt{background:var(--cream2)}
+  .lead-para{max-width:60ch;margin:0 auto 40px;text-align:center;font-size:clamp(16px,2.1vw,18px);color:var(--tx)}
+  .lead-para b{color:var(--ink)}
+  .quoi{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:20px}
+  .qcard{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:28px 24px;box-shadow:var(--shadow-sm);text-align:center}
+  .qcard .ic{width:52px;height:52px;margin:0 auto 14px;color:var(--brand);background:color-mix(in srgb,var(--brand) 10%,#fff);border-radius:15px;display:grid;place-items:center}
+  .qcard .ic svg{width:26px;height:26px}
+  .qcard h3{font-family:'Fraunces',serif;font-weight:600;font-size:20px;color:var(--ink);margin:0 0 6px}
+  .qcard p{font-size:14.5px;color:var(--muted);margin:0}
+
+  /* étapes */
+  .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:22px;counter-reset:st}
+  .step{position:relative;padding:30px 24px 26px;background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow-sm)}
+  .step::before{counter-increment:st;content:counter(st);position:absolute;top:-18px;left:24px;width:44px;height:44px;background:var(--brand2);color:#fff;font-family:'Fraunces',serif;font-weight:700;font-size:20px;border-radius:13px;display:grid;place-items:center;box-shadow:0 8px 18px color-mix(in srgb,var(--brand2) 40%,transparent)}
+  .step h3{font-family:'Fraunces',serif;font-weight:600;font-size:19px;color:var(--ink);margin:14px 0 6px}
+  .step p{font-size:14.5px;color:var(--muted);margin:0}
+
+  /* crédit d'impôt */
+  .credit{background:var(--brand);color:#fff}
+  .credit .box{max-width:820px;margin:0 auto;text-align:center}
+  .credit .big{font-family:'Fraunces',serif;font-weight:700;font-size:clamp(30px,5vw,46px);line-height:1;margin:0 0 6px;display:inline-flex;align-items:baseline;gap:4px}
+  .credit .big .pct{color:#ffe6c9}
+  .credit h2{font-family:'Fraunces',serif;font-weight:600;font-size:clamp(22px,3.4vw,30px);margin:12px 0 12px}
+  .credit p{opacity:.94;max-width:56ch;margin:0 auto 18px;font-size:16px}
+  .credit .exemple{display:inline-flex;align-items:center;gap:14px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.26);border-radius:16px;padding:14px 22px;font-weight:600}
+  .credit .exemple b{font-size:22px;font-family:'Fraunces',serif}
+  .credit .exemple .arrow{opacity:.7}
+  .credit small{display:block;opacity:.72;font-size:12.5px;margin-top:16px}
+
+  /* forfaits */
+  .forfaits{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px}
+  .forfait{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:26px 24px;box-shadow:var(--shadow);display:flex;flex-direction:column}
+  .forfait .fn{font-weight:700;font-size:18px;color:var(--ink)}
+  .forfait .fp{font-family:'Fraunces',serif;font-weight:700;font-size:38px;color:var(--brand);margin:8px 0 2px;display:flex;align-items:baseline;gap:5px}
+  .forfait .fp small{font-family:'Inter';font-size:14px;font-weight:600;color:var(--muted)}
+  .forfait .fd{font-size:14px;color:var(--muted);margin:8px 0 16px;flex:1}
+  .forfait .compo{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{font-size:12px;font-weight:600;color:var(--brand);background:color-mix(in srgb,var(--brand) 10%,#fff);border:1px solid color-mix(in srgb,var(--brand) 22%,transparent);border-radius:999px;padding:4px 11px}
+  .chip.courses{color:var(--brand2);background:color-mix(in srgb,var(--brand2) 12%,#fff);border-color:color-mix(in srgb,var(--brand2) 30%,transparent)}
+
+  /* plats */
+  .plats{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px}
+  .plat{position:relative;border-radius:16px;overflow:hidden;aspect-ratio:1;background:var(--line);box-shadow:var(--shadow-sm)}
+  .plat img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .5s}
+  .plat:hover img{transform:scale(1.06)}
+  .plat .cap{position:absolute;left:0;right:0;bottom:0;padding:18px 12px 9px;font-size:13px;font-weight:600;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.68))}
+
+  /* avis */
+  .avis-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:18px;max-width:920px;margin:0 auto}
+  .avis-card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px 22px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:10px}
+  .avis-stars{color:var(--brand2);font-size:16px;letter-spacing:3px}
+  .avis-txt{font-size:15px;color:var(--tx);font-style:italic;line-height:1.6;flex:1}
+  .avis-auteur{font-weight:700;color:var(--ink);font-size:14px}
+  /* pour qui */
+  .pourqui{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;max-width:760px;margin:0 auto}
+  .pourqui span{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:10px 20px;font-weight:600;color:var(--ink);box-shadow:var(--shadow-sm);font-size:15px}
+
+  /* faq */
+  .faq{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+  details{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:4px 20px;box-shadow:var(--shadow-sm)}
+  summary{cursor:pointer;list-style:none;padding:16px 28px 16px 0;font-weight:600;color:var(--ink);font-size:16px;position:relative}
+  summary::-webkit-details-marker{display:none}
+  summary::after{content:"+";position:absolute;right:0;top:14px;font-size:22px;color:var(--brand);font-weight:400;transition:transform .2s}
+  details[open] summary::after{transform:rotate(45deg)}
+  details p{margin:0 0 16px;color:var(--muted);font-size:15px}
+
+  /* cta */
+  .cta{background:linear-gradient(135deg,var(--card),var(--cream2));border:1px solid var(--line);border-radius:26px;padding:52px 30px;text-align:center;box-shadow:var(--shadow)}
+  .cta h2{font-family:'Fraunces',serif;font-weight:600;font-size:clamp(24px,4vw,34px);color:var(--brand);margin:0 0 12px}
+  .cta p{color:var(--muted);max-width:46ch;margin:0 auto 26px;font-size:16px}
+  .cta-btns{display:flex;flex-wrap:wrap;gap:14px;justify-content:center}
+  .btn{display:inline-flex;align-items:center;gap:9px;background:var(--brand2);color:#fff;text-decoration:none;font-weight:700;font-size:16px;padding:16px 30px;border-radius:999px;box-shadow:0 10px 26px color-mix(in srgb,var(--brand2) 42%,transparent);transition:transform .12s}
+  .btn:hover{transform:translateY(-2px)}
+  .btn.ghost{background:transparent;color:var(--brand);border:2px solid var(--brand);box-shadow:none}
+  .btn.ghost:hover{background:color-mix(in srgb,var(--brand) 8%,transparent)}
+
+  /* modale contact */
+  .modal{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(20,25,18,.55);backdrop-filter:blur(3px)}
+  .modal.open{display:flex}
+  .sheet{background:var(--card);border-radius:22px;box-shadow:0 24px 60px rgba(20,30,15,.35);width:100%;max-width:440px;padding:30px 28px;position:relative;max-height:92vh;overflow:auto;animation:rise .35s ease both}
+  .sheet h3{font-family:'Fraunces',serif;font-weight:600;font-size:24px;color:var(--brand);margin:0 0 4px}
+  .sheet .sub{color:var(--muted);font-size:14.5px;margin:0 0 20px}
+  .sheet label{display:block;font-weight:600;font-size:13.5px;color:var(--ink);margin:0 0 5px}
+  .sheet .field{margin-bottom:15px}
+  .sheet input,.sheet textarea{width:100%;border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;font-family:inherit;font-size:15px;color:var(--ink);background:var(--cream);transition:border-color .15s}
+  .sheet input:focus,.sheet textarea:focus{outline:none;border-color:var(--brand)}
+  .sheet textarea{resize:vertical;min-height:92px}
+  .sheet .hp{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
+  .sheet .send{width:100%;margin-top:4px;border:none;cursor:pointer;background:var(--brand2);color:#fff;font-weight:700;font-size:16px;padding:14px;border-radius:999px;box-shadow:0 10px 24px color-mix(in srgb,var(--brand2) 40%,transparent);transition:transform .12s}
+  .sheet .send:hover{transform:translateY(-1px)}
+  .sheet .send:disabled{opacity:.6;cursor:default;transform:none}
+  .sheet .close{position:absolute;top:14px;right:16px;background:none;border:none;font-size:26px;line-height:1;color:var(--muted);cursor:pointer}
+  .sheet .msg{font-size:14px;margin-top:12px;text-align:center;font-weight:600}
+  .sheet .msg.ok{color:var(--brand)}
+  .sheet .msg.ko{color:#c0392b}
+  .sheet .done{text-align:center;padding:14px 0 6px}
+  .sheet .done .big{font-size:42px}
+  .sheet .done h3{margin:10px 0 6px}
+  .foot{text-align:center;padding:34px 20px 48px;color:var(--muted);font-size:13px;background:var(--cream2);border-top:1px solid var(--line)}
+  .foot a{color:var(--brand);font-weight:600;text-decoration:none}
+  .foot .mk{font-weight:700}
+</style>
+</head>
+<body>
+  <div id="load"><div class="spin"></div><div>Chargement…</div></div>
+  <div id="err"><div style="font-size:44px">🍽️</div><div>Cette page n'existe pas ou n'est plus disponible.</div><a href="https://mybatch.cooking" style="color:var(--brand);font-weight:600">Découvrir my batch →</a></div>
+
+  <div id="site">
+    <!-- HERO -->
+    <header class="hero">
+      <div class="bg" id="heroBg"></div>
+      <div class="veil"></div>
+      <div class="inner">
+        <img id="logo" class="logo" alt="" style="display:none">
+        <div class="eyebrow">Batch cooking à domicile</div>
+        <h1 id="titre"></h1>
+        <div id="heroVille" style="display:none;font-size:15px;opacity:.92;font-weight:600;margin:-6px 0 14px"></div>
+        <p class="lede">Vos repas de la semaine, faits maison et cuisinés pour vous. Vous choisissez vos plats, je m'occupe de tout — il ne vous reste plus qu'à passer à table.</p>
+        <div class="trust">
+          <span>👩‍🍳 Fait maison</span>
+          <span>🥦 Sur-mesure &amp; équilibré</span>
+          <span id="badgeSap" style="display:none">💶 Service à la personne</span>
+        </div>
+        <div class="scroll">↓</div>
+      </div>
+    </header>
+
+    <!-- A PROPOS (bio) -->
+    <section id="secBio" style="display:none">
+      <div class="wrap" style="max-width:760px;text-align:center">
+        <h2 class="stit reveal">À propos</h2>
+        <img id="bioPortrait" class="reveal" alt="" style="display:none;width:132px;height:132px;border-radius:50%;object-fit:cover;margin:0 auto 20px;border:5px solid var(--card);box-shadow:var(--shadow)">
+        <p id="bioText" class="reveal" style="font-size:clamp(16px,2.1vw,18px);color:var(--tx);white-space:pre-wrap;margin:0"></p>
+      </div>
+    </section>
+
+    <!-- C'EST QUOI -->
+    <section class="alt">
+      <div class="wrap">
+        <h2 class="stit reveal">Le batch cooking, c'est quoi ?</h2>
+        <p class="lead-para reveal">Une seule séance de cuisine, et <b>toute votre semaine de repas est prête</b>. Le batch cooking — ou « cuisine en lot » — consiste à préparer en une fois plusieurs plats maison, variés et équilibrés, que vous n'avez plus qu'à conserver, réchauffer et savourer. Fini le casse-tête du « qu'est-ce qu'on mange ce soir ? ».</p>
+        <div class="quoi">
+          <div class="qcard reveal">
+            <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+            <h3>Du temps retrouvé</h3>
+            <p>Plus de courses de dernière minute ni de cuisine chaque soir. Vos soirées et vos week-ends redeviennent les vôtres.</p>
+          </div>
+          <div class="qcard reveal">
+            <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10Z"/></svg></div>
+            <h3>Fait maison &amp; équilibré</h3>
+            <p>Des plats frais, cuisinés rien que pour vous, adaptés à vos goûts, vos portions et vos éventuelles allergies.</p>
+          </div>
+          <div class="qcard reveal">
+            <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></div>
+            <h3>Zéro prise de tête</h3>
+            <p>Vous choisissez, je cuisine. Vous n'avez plus qu'à réchauffer et à vous régaler, toute la semaine.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- COMMENT CA SE PASSE -->
+    <section>
+      <div class="wrap">
+        <h2 class="stit reveal">Comment ça se passe ?</h2>
+        <p class="ssub reveal">Trois étapes, et c'est tout.</p>
+        <div class="steps">
+          <div class="step reveal"><h3>Vous choisissez vos plats</h3><p>Depuis votre espace en ligne, composez votre menu de la semaine parmi mes recettes.</p></div>
+          <div class="step reveal"><h3>Je cuisine tout, maison</h3><p>Je prépare vos plats frais, selon vos goûts, vos portions et vos besoins particuliers.</p></div>
+          <div class="step reveal"><h3>Vous vous régalez</h3><p>Vos repas sont prêts pour la semaine. Il ne reste plus qu'à réchauffer et à déguster.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CREDIT D'IMPOT -->
+    <section class="credit" id="secCredit" style="display:none">
+      <div class="wrap">
+        <div class="box reveal">
+          <div class="big"><span class="pct">50 %</span></div>
+          <h2>de crédit d'impôt</h2>
+          <p>Le batch cooking à domicile est un <b>service à la personne</b>. À ce titre, votre prestation peut ouvrir droit à un <b>crédit d'impôt de 50 %</b> : concrètement, une prestation vous coûte réellement moitié moins.</p>
+          <div class="exemple"><b>100 €</b> <span class="arrow">→</span> <b>50 €</b> réellement à votre charge</div>
+          <small>Avantage fiscal accordé au titre des services à la personne, sous réserve de votre éligibilité et de la situation de votre prestataire. Renseignez-vous auprès de moi.</small>
+        </div>
+      </div>
+    </section>
+
+    <!-- FORMULES -->
+    <section id="secForfaits" class="alt" style="display:none">
+      <div class="wrap">
+        <h2 class="stit reveal">Mes formules</h2>
+        <p class="ssub reveal">Choisissez ce qui vous convient — le tarif est indiqué par prestation.</p>
+        <div id="forfaits" class="forfaits"></div>
+      </div>
+    </section>
+
+    <!-- PLATS -->
+    <section id="secPlats" style="display:none">
+      <div class="wrap">
+        <h2 class="stit reveal">Quelques plats</h2>
+        <p class="ssub reveal">Un aperçu de ce que je cuisine — tout est fait maison.</p>
+        <div id="plats" class="plats"></div>
+      </div>
+    </section>
+
+    <!-- AVIS -->
+    <section id="secAvis" class="alt" style="display:none">
+      <div class="wrap">
+        <h2 class="stit reveal">Elles m'ont fait confiance</h2>
+        <p class="ssub reveal">Ce que disent mes clientes.</p>
+        <div id="avisList" class="avis-grid"></div>
+      </div>
+    </section>
+
+    <!-- POUR QUI -->
+    <section>
+      <div class="wrap">
+        <h2 class="stit reveal">C'est fait pour qui ?</h2>
+        <p class="ssub reveal">Le batch cooking s'adapte à tous les rythmes de vie.</p>
+        <div class="pourqui reveal">
+          <span>👨‍👩‍👧 Familles débordées</span>
+          <span>🍼 Jeunes parents</span>
+          <span>💼 Actifs pressés</span>
+          <span>🌿 Envie de mieux manger</span>
+          <span>👵 Seniors</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section>
+      <div class="wrap">
+        <h2 class="stit reveal">Questions fréquentes</h2>
+        <p class="ssub reveal">&nbsp;</p>
+        <div class="faq">
+          <details class="reveal"><summary>Comment je choisis mes plats&nbsp;?</summary><p>Tout se passe depuis votre espace en ligne : chaque semaine, vous composez votre menu parmi mes recettes, en toute autonomie.</p></details>
+          <details class="reveal"><summary>Et si j'ai des allergies ou un régime particulier&nbsp;?</summary><p>Tout est personnalisable : allergies, intolérances, sans porc, préférences… Je cuisine selon vos besoins et je m'adapte à chaque foyer.</p></details>
+          <details class="reveal"><summary>Les courses sont-elles incluses&nbsp;?</summary><p>Cela dépend de la formule choisie. Les formules « + courses » incluent l'achat des ingrédients ; pour les autres, une liste de courses vous est transmise à l'avance. Voir la section « Mes formules ».</p></details>
+          <details class="reveal" id="faqCredit" style="display:none"><summary>Comment fonctionne le crédit d'impôt&nbsp;?</summary><p>Le batch cooking à domicile relève des services à la personne, qui ouvrent droit à un crédit d'impôt de 50 % sous conditions d'éligibilité. N'hésitez pas à m'en parler, je vous explique tout.</p></details>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="alt">
+      <div class="wrap">
+        <div class="cta reveal">
+          <h2>Envie de vous régaler cette semaine ?</h2>
+          <p id="ctaText">Nouvelle cliente ? Contactez-moi pour créer votre accès. Déjà cliente ? Filez directement dans votre espace.</p>
+          <div class="cta-btns">
+            <a class="btn ghost" href="https://app.mybatch.cooking">Déjà cliente ? Accéder à mon espace</a>
+            <button type="button" class="btn" id="btnContact" style="display:none">✉️ Me contacter</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="foot">Propulsé par <a class="mk" href="https://mybatch.cooking">my batch</a> — l'app des batchcookeuses indépendantes</div>
+  </div>
+
+  <!-- MODALE CONTACT -->
+  <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+    <div class="sheet">
+      <button type="button" class="close" id="mClose" aria-label="Fermer">×</button>
+      <div id="mForm">
+        <h3 id="mTitle">Me contacter</h3>
+        <p class="sub" id="mSub">Laissez-moi vos coordonnées, je vous réponds vite.</p>
+        <form id="contactForm">
+          <div class="field"><label for="cNom">Votre nom</label><input id="cNom" name="nom" type="text" required autocomplete="name"></div>
+          <div class="field"><label for="cEmail">Votre email</label><input id="cEmail" name="email" type="email" required autocomplete="email"></div>
+          <div class="field"><label for="cTel">Téléphone <span style="color:var(--muted);font-weight:400">(facultatif)</span></label><input id="cTel" name="telephone" type="tel" autocomplete="tel"></div>
+          <div class="field"><label for="cMsg">Votre message <span style="color:var(--muted);font-weight:400">(facultatif)</span></label><textarea id="cMsg" name="message" placeholder="Bonjour, je serais intéressée par…"></textarea></div>
+          <input class="hp" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+          <button type="submit" class="send" id="cSend">Envoyer ma demande</button>
+          <div class="msg" id="cMsgOut"></div>
+        </form>
+      </div>
+      <div class="done" id="mDone" style="display:none">
+        <div class="big">✅</div>
+        <h3>Message envoyé !</h3>
+        <p class="sub" id="mDoneSub">Merci, votre demande a bien été transmise. Vous serez recontacté·e très vite.</p>
+        <button type="button" class="send" id="mDoneClose">Fermer</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  function getSlug(){
+    var q = new URLSearchParams(location.search).get('slug');
+    if (q) return q;
+    var m = location.pathname.match(/\/chez\/([^\/?#]+)/i);
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function compo(f){
+    var out=[]; if(f.nb_entrees>0)out.push(f.nb_entrees+' entrée'+(f.nb_entrees>1?'s':''));
+    if(f.nb_plats>0)out.push(f.nb_plats+' plat'+(f.nb_plats>1?'s':''));
+    if(f.nb_desserts>0)out.push(f.nb_desserts+' dessert'+(f.nb_desserts>1?'s':''));
+    if(f.nb_petit_plus>0)out.push(f.nb_petit_plus+' petit plus');
+    return out;
+  }
+  function setupContact(slug){
+    var modal=document.getElementById('modal'), btn=document.getElementById('btnContact'),
+        form=document.getElementById('contactForm'), out=document.getElementById('cMsgOut'),
+        send=document.getElementById('cSend');
+    function open(){ modal.classList.add('open'); document.body.style.overflow='hidden'; setTimeout(function(){document.getElementById('cNom').focus();},60); }
+    function close(){ modal.classList.remove('open'); document.body.style.overflow=''; }
+    btn.addEventListener('click', open);
+    document.getElementById('mClose').addEventListener('click', close);
+    document.getElementById('mDoneClose').addEventListener('click', close);
+    modal.addEventListener('click', function(e){ if(e.target===modal) close(); });
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape' && modal.classList.contains('open')) close(); });
+    if(location.hash==='#contact') open();
+    form.addEventListener('submit', async function(e){
+      e.preventDefault();
+      out.textContent=''; out.className='msg';
+      var payload={ slug:slug, nom:form.nom.value.trim(), email:form.email.value.trim(),
+        telephone:form.telephone.value.trim(), message:form.message.value.trim(), website:form.website.value };
+      if(!payload.nom || !payload.email){ out.textContent='Merci d’indiquer votre nom et votre email.'; out.className='msg ko'; return; }
+      send.disabled=true; var lbl=send.textContent; send.textContent='Envoi…';
+      try{
+        var r=await fetch('/.netlify/functions/vitrine-contact',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+        if(!r.ok) throw 0;
+        document.getElementById('mForm').style.display='none';
+        document.getElementById('mDone').style.display='block';
+      }catch(err){
+        out.textContent='Oups, l’envoi a échoué. Réessayez dans un instant.'; out.className='msg ko';
+        send.disabled=false; send.textContent=lbl;
+      }
+    });
+  }
+  (async function(){
+    var slug = getSlug();
+    var load=document.getElementById('load'), err=document.getElementById('err'), site=document.getElementById('site');
+    if(!slug){ load.style.display='none'; err.style.display='flex'; return; }
+    try{
+      var r = await fetch('/.netlify/functions/vitrine?slug='+encodeURIComponent(slug));
+      if(!r.ok) throw 0;
+      var d = await r.json();
+      var root = document.documentElement.style;
+      root.setProperty('--brand', d.couleur_principale || '#3d6b4f');
+      root.setProperty('--brand2', d.couleur_secondaire || '#e8843d');
+      document.title = d.nom_marque;
+      document.getElementById('titre').textContent = d.nom_marque;
+      if(d.logo_url){ var lg=document.getElementById('logo'); lg.src=d.logo_url; lg.style.display='inline-block'; }
+      if(d.ville){ var hv=document.getElementById('heroVille'); hv.textContent='📍 '+d.ville; hv.style.display='block'; }
+      if(d.portrait_url){ var bp=document.getElementById('bioPortrait'); bp.src=d.portrait_url; bp.style.display='block'; }
+      if(d.bio){ document.getElementById('bioText').textContent=d.bio; }
+      if(d.bio || d.portrait_url){ document.getElementById('secBio').style.display='block'; }
+      if(d.nom_contact){ document.getElementById('ctaText').textContent = 'Nouvelle cliente ? Contactez '+d.nom_contact+' pour créer votre accès. Déjà cliente ? Filez directement dans votre espace.'; }
+      if(d.credit_impot){
+        document.getElementById('secCredit').style.display='block';
+        document.getElementById('badgeSap').style.display='inline-flex';
+        document.getElementById('faqCredit').style.display='block';
+      }
+      if(d.contactable){
+        document.getElementById('btnContact').style.display='inline-flex';
+        if(d.nom_contact){
+          document.getElementById('mTitle').textContent='Contacter '+d.nom_contact;
+          document.getElementById('mSub').textContent='Laissez vos coordonnées à '+d.nom_contact+', vous serez recontacté·e très vite.';
+        }
+        setupContact(slug);
+      }
+      // fond de hero : photo de couverture choisie, sinon un plat par défaut
+      var heroImg = d.cover_url || (d.plats && d.plats.length ? d.plats[0].photo_url : '');
+      if(heroImg){ document.getElementById('heroBg').style.backgroundImage = 'url("'+String(heroImg).replace(/"/g,'')+'")'; }
+      // forfaits
+      if(d.forfaits && d.forfaits.length){
+        document.getElementById('forfaits').innerHTML = d.forfaits.map(function(f){
+          var chips = compo(f).map(function(c){return '<span class="chip">'+esc(c)+'</span>';}).join('');
+          if(f.inclut_courses) chips += '<span class="chip courses">🛒 courses incluses</span>';
+          return '<div class="forfait reveal"><div class="fn">'+esc(f.nom)+'</div>'
+            + '<div class="fp">'+(f.prix!=null?esc(f.prix):'')+'<small>€ / prestation</small></div>'
+            + (f.description?'<div class="fd">'+esc(f.description)+'</div>':'<div class="fd"></div>')
+            + '<div class="compo">'+chips+'</div></div>';
+        }).join('');
+        document.getElementById('secForfaits').style.display='block';
+      }
+      // plats
+      if(d.plats && d.plats.length){
+        document.getElementById('plats').innerHTML = d.plats.map(function(p){
+          return '<div class="plat reveal"><img src="'+esc(p.photo_url)+'" alt="'+esc(p.nom_du_plat)+'" loading="lazy"><div class="cap">'+esc(p.nom_du_plat)+'</div></div>';
+        }).join('');
+        document.getElementById('secPlats').style.display='block';
+      }
+      // avis
+      if(d.avis && d.avis.length){
+        document.getElementById('avisList').innerHTML = d.avis.map(function(a){
+          var n=Math.max(0,Math.min(5,parseInt(a.note,10)||5));
+          var stars='★★★★★'.slice(0,n)+'☆☆☆☆☆'.slice(0,5-n);
+          return '<div class="avis-card reveal"><div class="avis-stars">'+stars+'</div>'
+            +'<div class="avis-txt">« '+esc(a.texte)+' »</div>'
+            +(a.auteur?'<div class="avis-auteur">— '+esc(a.auteur)+'</div>':'')+'</div>';
+        }).join('');
+        document.getElementById('secAvis').style.display='block';
+      }
+      load.style.display='none'; site.style.display='block';
+    }catch(e){ load.style.display='none'; err.style.display='flex'; }
+  })();
+</script>
+</body>
+</html>

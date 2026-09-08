@@ -178,6 +178,25 @@ exports.handler = async (event) => {
         return json(200, { ok: true });
       }
 
+      // ---------- Avis / témoignages (gérés par la cuisinière, scopés à SON entreprise) ----------
+      case 'list_avis': {
+        const rows = await pg(`avis?entreprise_id=eq.${ENT}&select=id,auteur,note,texte,created_at&order=created_at.desc`);
+        return json(200, { avis: rows || [] });
+      }
+      case 'create_avis': {
+        const auteur = String(payload.auteur || '').slice(0, 120).trim();
+        const texte = String(payload.texte || '').slice(0, 1000).trim();
+        let note = parseInt(payload.note, 10); if (!(note >= 1 && note <= 5)) note = 5;
+        if (!texte) return json(400, { error: 'Le texte de l\'avis est requis' });
+        const row = await pg(`avis`, { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ entreprise_id: ENT, auteur: auteur || null, note, texte }) });
+        return json(200, { avis: Array.isArray(row) ? row[0] : row });
+      }
+      case 'delete_avis': {
+        const { id } = payload; if (!id) return json(400, { error: 'id requis' });
+        await pg(`avis?id=eq.${id}&entreprise_id=eq.${ENT}`, { method: 'DELETE', headers: minimal });
+        return json(200, { ok: true });
+      }
+
       // ---------- Founder / super-admin uniquement ----------
       case 'list_entreprises': {
         if (!isFounder) return json(403, { error: 'Founder requis' });

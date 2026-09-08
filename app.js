@@ -1353,7 +1353,11 @@ async function loadBranding(opts = {}) {
       if (slug) qs = `slug=${encodeURIComponent(slug)}`;
     }
     if (!qs) { applyGeneric(); return; }
-    const r = await fetch(`/.netlify/functions/branding?${qs}`);
+    // Si la cliente est connectée, on passe son token : le serveur ne renvoie les
+    // coordonnées de paiement qu'aux membres de l'entreprise (jamais en public).
+    const fetchOpts = {};
+    try { const { data: sess } = await sb.auth.getSession(); const t = sess?.session?.access_token; if (t) fetchOpts.headers = { Authorization: 'Bearer ' + t }; } catch (_) {}
+    const r = await fetch(`/.netlify/functions/branding?${qs}`, fetchOpts);
     if (!r.ok) { applyGeneric(); return; }
     const b = await r.json();
     if (explicit) brandingEntLocked = true;

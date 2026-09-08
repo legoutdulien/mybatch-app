@@ -2065,9 +2065,16 @@ async function saveClient() {
       if (mdp || email !== (getClient(id).email)) {
         await adminAction('update_user_auth', { id, type: 'client', email: email !== getClient(id).email ? email : undefined, password: mdp || undefined });
       }
+      const oldAssigne = (getClient(id) || {}).assigne_a_id || null;
       const payload = { nom, email, telephone: telephone || null, adresse: adresse || null, notes: notes || null, nombre_portions: portions, assigne_a_id };
       await writeVerified(() => sb.from('clients').update(payload).eq('id', id).select('id'));
       const c = getClient(id); if (c) Object.assign(c, payload);
+      // Réassignation : les commandes EN ATTENTE de la cliente suivent la nouvelle cuisinière
+      // (sinon elles restent chez l'ancienne -> apparitions "fantômes" / commandes introuvables).
+      if (oldAssigne !== assigne_a_id) {
+        const { error: eCmd } = await sb.from('commandes').update({ assigne_a_id }).eq('client_id', id).eq('statut', 'En attente de paiement');
+        if (!eCmd && Array.isArray(DATA.commandes)) DATA.commandes.forEach(cm => { if (cm.client_id === id && cm.statut === 'En attente de paiement') cm.assigne_a_id = assigne_a_id; });
+      }
       toast('✅ Client modifie');
     } else {
       if (!mdp) { toast('⚠️ Mot de passe obligatoire pour creation'); return; }
@@ -2469,6 +2476,70 @@ async function renderParametres() {
       <span id="prmStatus" style="font-size:13px;color:var(--txl);align-self:center"></span>
     </div>
 
+    ${(e.cycle === 'annuel' || e.plan === 'founder' || e.vitrine_offerte === true) ? `
+    <div style="margin-top:28px;padding:20px;border:1.5px solid var(--bgd);border-radius:14px;background:var(--bgc)">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+        <h3 style="font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:600;color:var(--v2)">🌐 Ma vitrine en ligne</h3>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600"><input id="prmVitrineActive" type="checkbox" style="width:auto;margin:0" ${e.vitrine_active !== false ? 'checked' : ''}> Vitrine active</label>
+      </div>
+      <p style="color:var(--txm);font-size:13px;margin-bottom:14px">Votre mini-site public, généré automatiquement depuis votre marque, vos forfaits et vos plats. Partagez ce lien à vos clientes (réseaux, carte de visite, signature d'email…).</p>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px">
+        <input id="prmVitrineUrl" type="text" readonly data-slug="${escapeAttr(e.slug || '')}" value="app.mybatch.cooking/chez/${escapeAttr(e.slug || '')}" style="flex:1;min-width:220px;font-size:13px;background:var(--wh)" onclick="this.select()">
+        <button class="btn btn-ghost btn-sm" id="prmVitrineCopy" type="button">📋 Copier</button>
+        <a class="btn btn-ghost btn-sm" id="prmVitrineVoir" href="/chez/${escapeAttr(e.slug || '')}" target="_blank" rel="noopener">👁️ Voir</a>
+      </div>
+      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px">Photo de couverture <span style="color:var(--txl);font-weight:400">(le grand bandeau en haut de la vitrine)</span></label>
+      <div style="display:flex;gap:14px;align-items:center;padding:14px;border:1.5px dashed var(--bgd);border-radius:12px">
+        <div id="prmCoverPreview" style="width:120px;height:70px;border-radius:10px;background:var(--wh);display:flex;align-items:center;justify-content:center;font-size:24px;overflow:hidden;flex-shrink:0">${e.cover_url ? `<img src="${escapeAttr(e.cover_url)}" style="width:100%;height:100%;object-fit:cover">` : '🖼️'}</div>
+        <div style="flex:1">
+          <button class="btn btn-ghost" id="prmCoverBtn" type="button">📷 Changer la couverture</button>
+          <div style="font-size:11px;color:var(--txl);margin-top:6px" id="prmCoverNom">Format paysage (16:9). Max 2 MB. Enregistrée automatiquement. Sinon, un de vos plats est utilisé.</div>
+        </div>
+        <input type="file" id="prmCoverFile" accept="image/*" style="display:none">
+        <input type="hidden" id="prmCoverUrl" value="${escapeAttr(e.cover_url || '')}">
+      </div>
+      <div class="fg" style="margin-top:16px">
+        <label>Ville <span style="color:var(--txl);font-weight:400">(affichée sur la vitrine)</span></label>
+        <input id="prmVille" type="text" value="${escapeAttr(e.ville || '')}" placeholder="Ex : Bordeaux" style="max-width:280px">
+      </div>
+      <div class="fg" style="margin-top:8px">
+        <label>Ta photo <span style="color:var(--txl);font-weight:400">(ton portrait, affiché dans « À propos »)</span></label>
+        <div style="display:flex;gap:14px;align-items:center;padding:14px;border:1.5px dashed var(--bgd);border-radius:12px">
+          <div id="prmPortraitPreview" style="width:72px;height:72px;border-radius:50%;background:var(--wh);display:flex;align-items:center;justify-content:center;font-size:26px;overflow:hidden;flex-shrink:0">${e.portrait_url ? `<img src="${escapeAttr(e.portrait_url)}" style="width:100%;height:100%;object-fit:cover">` : '🧑‍🍳'}</div>
+          <div style="flex:1">
+            <button class="btn btn-ghost" id="prmPortraitBtn" type="button">📷 Changer ma photo</button>
+            <div style="font-size:11px;color:var(--txl);margin-top:6px" id="prmPortraitNom">Portrait carré recommandé. Max 2 MB. Enregistrée automatiquement.</div>
+          </div>
+          <input type="file" id="prmPortraitFile" accept="image/*" style="display:none">
+          <input type="hidden" id="prmPortraitUrl" value="${escapeAttr(e.portrait_url || '')}">
+        </div>
+      </div>
+      <div class="fg" style="margin-top:8px">
+        <label>À propos / bio <span style="color:var(--txl);font-weight:400">(quelques lignes sur vous, affichées sur la vitrine)</span></label>
+        <textarea id="prmBio" rows="4" placeholder="Ex : Passionnée de cuisine depuis toujours, je prépare chez vous des petits plats maison, sains et gourmands…">${escapeHtml(e.bio || '')}</textarea>
+      </div>
+      <div style="margin-top:18px;border-top:1px solid var(--bgd);padding-top:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:4px">
+          <label style="font-weight:600;font-size:14px;margin:0">⭐ Avis clientes</label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600"><input id="prmVitrineAvis" type="checkbox" style="width:auto;margin:0" ${e.vitrine_avis !== false ? 'checked' : ''}> Afficher sur la vitrine</label>
+        </div>
+        <p style="color:var(--txm);font-size:12px;margin-bottom:10px">Ajoutez les témoignages de vos clientes : ils s'affichent sur votre vitrine avec une note en étoiles.</p>
+        <div id="prmAvisList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input id="prmAvisAuteur" type="text" placeholder="Nom de la cliente (ex : Marie L.)" style="flex:1;min-width:160px">
+          <select id="prmAvisNote" style="width:auto">
+            <option value="5">★★★★★</option><option value="4">★★★★☆</option><option value="3">★★★☆☆</option><option value="2">★★☆☆☆</option><option value="1">★☆☆☆☆</option>
+          </select>
+        </div>
+        <textarea id="prmAvisTexte" rows="2" placeholder="Son témoignage…" style="margin-top:8px"></textarea>
+        <button class="btn btn-ghost btn-sm" id="prmAvisAdd" type="button" style="margin-top:8px">+ Ajouter l'avis</button>
+      </div>
+      <div style="margin-top:20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-primary" id="prmSaveVitrine" type="button">💾 Enregistrer ma vitrine</button>
+        <span id="prmVitrineStatus" style="font-size:13px;color:var(--txl)"></span>
+      </div>
+    </div>` : ''}
+
     <div style="margin-top:32px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <h3 style="font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:600;color:var(--v2)">📦 Mes forfaits</h3>
@@ -2493,6 +2564,36 @@ async function renderParametres() {
     $(id + 'Hex').addEventListener('input', e => { if (/^#[0-9a-f]{6}$/i.test(e.target.value)) $(id).value = e.target.value; });
   });
   $('prmSave').addEventListener('click', saveParametres);
+  // Ma vitrine (formule annuelle / founder)
+  if ($('prmVitrineCopy')) {
+    // L'URL affichée suit le domaine courant : staging en test, app.mybatch.cooking en prod.
+    const vSlug = $('prmVitrineUrl').getAttribute('data-slug') || '';
+    $('prmVitrineUrl').value = location.host + '/chez/' + vSlug;
+    $('prmVitrineVoir').setAttribute('href', location.origin + '/chez/' + vSlug);
+    $('prmVitrineCopy').addEventListener('click', async () => {
+      const val = $('prmVitrineUrl').value;
+      try { await navigator.clipboard.writeText('https://' + val); } catch (_) { $('prmVitrineUrl').select(); document.execCommand('copy'); }
+      $('prmVitrineCopy').textContent = '✅ Copié';
+      setTimeout(() => { $('prmVitrineCopy').textContent = '📋 Copier'; }, 1600);
+    });
+    $('prmCoverBtn').addEventListener('click', () => $('prmCoverFile').click());
+    $('prmCoverFile').addEventListener('change', async (ev) => {
+      const file = ev.target.files?.[0]; if (!file) return;
+      await uploadParametresCover(file);
+    });
+    $('prmPortraitBtn').addEventListener('click', () => $('prmPortraitFile').click());
+    $('prmPortraitFile').addEventListener('change', async (ev) => {
+      const file = ev.target.files?.[0]; if (!file) return;
+      await uploadParametresPortrait(file);
+    });
+    $('prmAvisAdd').addEventListener('click', addAvis);
+    $('prmSaveVitrine').addEventListener('click', async () => {
+      const st = $('prmVitrineStatus'); st.textContent = '⏳ Enregistrement…';
+      try { await saveParametres(); st.textContent = '✅ Vitrine enregistrée'; setTimeout(() => { st.textContent = ''; }, 2500); }
+      catch (e) { st.textContent = '⚠️ ' + msgErr(e); }
+    });
+    renderAvisList();
+  }
   $('prmAddForfait').addEventListener('click', () => openForfaitForm(null));
   $('prmManageSub')?.addEventListener('click', ouvrirPortailStripe);
   $('prmChangeFormule')?.addEventListener('click', ouvrirChangeFormule);
@@ -2745,10 +2846,101 @@ async function uploadParametresLogo(file) {
     const { data: pub } = sb.storage.from(STORAGE_BUCKET).getPublicUrl(filename);
     $('prmLogoUrl').value = pub.publicUrl;
     $('prmLogoPreview').innerHTML = `<img src="${escapeAttr(pub.publicUrl)}" style="width:100%;height:100%;object-fit:cover">`;
-    $('prmLogoNom').textContent = '✅ Logo uploadé — clique Enregistrer';
+    try { await saveVitrineField('logo_url', pub.publicUrl); applyEntrepriseBranding(); $('prmLogoNom').textContent = '✅ Logo enregistré'; }
+    catch (e2) { $('prmLogoNom').textContent = '✅ Logo prêt — clique « Enregistrer »'; }
   } catch (e) {
     $('prmLogoNom').textContent = '⚠️ ' + msgErr(e);
   }
+}
+
+async function uploadParametresCover(file) {
+  if (file.size > 2 * 1024 * 1024) { toast('⚠️ Image trop lourde (max 2 MB)'); return; }
+  $('prmCoverNom').textContent = '⏳ Upload...';
+  try {
+    const compressed = await compressImage(file, 1600, 0.82);
+    const blob = compressed || file;
+    const ext = compressed ? 'jpg' : ((file.name.split('.').pop() || 'jpg').toLowerCase());
+    const ctype = compressed ? 'image/jpeg' : (file.type || 'image/jpeg');
+    const filename = `covers/${CURRENT_ENTREPRISE_ID}-${Date.now()}.${ext}`;
+    const { error } = await sb.storage.from(STORAGE_BUCKET).upload(filename, blob, { upsert: true, contentType: ctype });
+    if (error) throw error;
+    const { data: pub } = sb.storage.from(STORAGE_BUCKET).getPublicUrl(filename);
+    $('prmCoverUrl').value = pub.publicUrl;
+    $('prmCoverPreview').innerHTML = `<img src="${escapeAttr(pub.publicUrl)}" style="width:100%;height:100%;object-fit:cover">`;
+    try { await saveVitrineField('cover_url', pub.publicUrl); $('prmCoverNom').textContent = '✅ Couverture enregistrée'; }
+    catch (e2) { $('prmCoverNom').textContent = '✅ Prête — clique « Enregistrer »'; }
+  } catch (e) {
+    $('prmCoverNom').textContent = '⚠️ ' + msgErr(e);
+  }
+}
+
+// Enregistre immédiatement UN champ de l'entreprise (upload d'image = sauvegarde directe,
+// pas besoin de cliquer « Enregistrer » puis de scroller).
+async function saveVitrineField(field, value) {
+  await writeVerified(() => sb.from('entreprises').update({ [field]: value }).eq('id', CURRENT_ENTREPRISE_ID).select('id'));
+  const e = getCurrentEntreprise(); if (e) e[field] = value;
+}
+
+async function uploadParametresPortrait(file) {
+  if (file.size > 2 * 1024 * 1024) { toast('⚠️ Image trop lourde (max 2 MB)'); return; }
+  $('prmPortraitNom').textContent = '⏳ Upload...';
+  try {
+    const compressed = await compressImage(file, 800, 0.85);
+    const blob = compressed || file;
+    const ext = compressed ? 'jpg' : ((file.name.split('.').pop() || 'jpg').toLowerCase());
+    const ctype = compressed ? 'image/jpeg' : (file.type || 'image/jpeg');
+    const filename = `portraits/${CURRENT_ENTREPRISE_ID}-${Date.now()}.${ext}`;
+    const { error } = await sb.storage.from(STORAGE_BUCKET).upload(filename, blob, { upsert: true, contentType: ctype });
+    if (error) throw error;
+    const { data: pub } = sb.storage.from(STORAGE_BUCKET).getPublicUrl(filename);
+    $('prmPortraitUrl').value = pub.publicUrl;
+    $('prmPortraitPreview').innerHTML = `<img src="${escapeAttr(pub.publicUrl)}" style="width:100%;height:100%;object-fit:cover">`;
+    try { await saveVitrineField('portrait_url', pub.publicUrl); $('prmPortraitNom').textContent = '✅ Photo enregistrée'; }
+    catch (e2) { $('prmPortraitNom').textContent = '✅ Prête — clique « Enregistrer »'; }
+  } catch (e) {
+    $('prmPortraitNom').textContent = '⚠️ ' + msgErr(e);
+  }
+}
+
+function starStr(n) { n = Math.max(0, Math.min(5, parseInt(n, 10) || 5)); return '★★★★★'.slice(0, n) + '☆☆☆☆☆'.slice(0, 5 - n); }
+
+async function renderAvisList() {
+  const box = $('prmAvisList'); if (!box) return;
+  box.innerHTML = '<div style="font-size:12px;color:var(--txl)">Chargement…</div>';
+  try {
+    const { avis } = await adminAction('list_avis');
+    if (!avis || !avis.length) { box.innerHTML = '<div style="font-size:12px;color:var(--txl)">Aucun avis pour l\'instant.</div>'; return; }
+    box.innerHTML = avis.map(a => `<div style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--bgd);border-radius:10px;background:var(--wh)">
+      <div style="flex:1;min-width:0">
+        <div style="color:var(--orange);font-size:13px;letter-spacing:2px">${starStr(a.note)}</div>
+        <div style="font-size:13px;color:var(--tx);font-style:italic">« ${escapeHtml(a.texte || '')} »</div>
+        ${a.auteur ? `<div style="font-size:12px;font-weight:600;color:var(--ink);margin-top:2px">— ${escapeHtml(a.auteur)}</div>` : ''}
+      </div>
+      <button class="btn btn-ghost btn-sm" data-del-avis="${a.id}" type="button" title="Supprimer" style="flex-shrink:0">🗑️</button>
+    </div>`).join('');
+    box.querySelectorAll('[data-del-avis]').forEach(b => b.addEventListener('click', () => deleteAvis(b.getAttribute('data-del-avis'))));
+  } catch (e) { box.innerHTML = '<div style="font-size:12px;color:var(--rouge,#c0392b)">' + msgErr(e) + '</div>'; }
+}
+
+async function addAvis() {
+  const texte = $('prmAvisTexte').value.trim();
+  const auteur = $('prmAvisAuteur').value.trim();
+  const note = $('prmAvisNote').value;
+  if (!texte) { toast('⚠️ Écris le témoignage'); return; }
+  const btn = $('prmAvisAdd'); btn.disabled = true; const lbl = btn.textContent; btn.textContent = 'Ajout…';
+  try {
+    await adminAction('create_avis', { auteur, note, texte });
+    $('prmAvisTexte').value = ''; $('prmAvisAuteur').value = '';
+    await renderAvisList();
+    toast('✅ Avis ajouté');
+  } catch (e) { toast('⚠️ ' + msgErr(e)); }
+  finally { btn.disabled = false; btn.textContent = lbl; }
+}
+
+async function deleteAvis(id) {
+  if (!confirm('Supprimer cet avis ?')) return;
+  try { await adminAction('delete_avis', { id }); await renderAvisList(); }
+  catch (e) { toast('⚠️ ' + msgErr(e)); }
 }
 
 // Ecriture RLS verifiee : sans .select(), un UPDATE/DELETE touchant 0 ligne (juste apres login,
@@ -2779,6 +2971,11 @@ async function saveParametres() {
   const creditImpot = $('prmCreditImpot') ? $('prmCreditImpot').checked : false;
   const paiement = $('prmPaiement').value.trim();
   const logo = $('prmLogoUrl').value.trim();
+  const hasVitrine = !!$('prmVitrineActive');
+  const vitrineActive = hasVitrine ? $('prmVitrineActive').checked : undefined;
+  const coverUrl = $('prmCoverUrl') ? $('prmCoverUrl').value.trim() : undefined;
+  const ville = $('prmVille') ? $('prmVille').value.trim() : undefined;
+  const bio = $('prmBio') ? $('prmBio').value.trim() : undefined;
   if (!nom) { toast('⚠️ Le nom de la marque est obligatoire'); return; }
   if (![col1, col2, col3].every(c => /^#[0-9a-f]{6}$/i.test(c))) { toast('⚠️ Couleurs invalides'); return; }
   if (isNaN(montant) || montant < 0) { toast('⚠️ Montant invalide'); return; }
@@ -2800,6 +2997,7 @@ async function saveParametres() {
     instructions_paiement: paiement || null,
     logo_url: logo || null
   };
+  if (hasVitrine) { payload.vitrine_active = vitrineActive; payload.cover_url = coverUrl || null; payload.ville = ville || null; payload.bio = bio || null; payload.portrait_url = ($('prmPortraitUrl') ? $('prmPortraitUrl').value.trim() : '') || null; payload.vitrine_avis = $('prmVitrineAvis') ? $('prmVitrineAvis').checked : true; }
   // Note : password gere uniquement via Supabase Auth, plus stocke dans entreprises
 
   $('prmStatus').textContent = '⏳ Enregistrement...';

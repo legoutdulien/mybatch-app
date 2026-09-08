@@ -27,3 +27,9 @@
   to = "/404.html"
   status = 404
   force = true
+
+# Mini-site vitrine public d'une batchcookeuse : /chez/<slug> -> vitrine.html (URL conservee)
+[[redirects]]
+  from = "/chez/*"
+  to = "/vitrine.html"
+  status = 200
