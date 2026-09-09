@@ -937,9 +937,7 @@ function forfaitQuotas(f) {
 }
 function currentQuotas() { return forfaitQuotas(forfaitSel); }
 // Types optionnels d'une formule : la cliente peut en prendre de 0 à N (au lieu d'exactement N)
-// Réseau : pour un forfait de cuisinière (salarie_id renseigné), les petits plus sont TOUJOURS
-// obligatoires (inclus dans la formule), jamais proposés en option — contrairement à l'espace tête de réseau.
-function forfaitOpt(f) { return f ? { entree: !!f.opt_entree, plat: !!f.opt_plat, dessert: !!f.opt_dessert, petit_plus: f.salarie_id ? false : !!f.opt_petit_plus } : { entree: false, plat: false, dessert: false, petit_plus: false }; }
+function forfaitOpt(f) { return f ? { entree: !!f.opt_entree, plat: !!f.opt_plat, dessert: !!f.opt_dessert, petit_plus: !!f.opt_petit_plus } : { entree: false, plat: false, dessert: false, petit_plus: false }; }
 function currentOpt() { return forfaitOpt(forfaitSel); }
 // Nombre d'éléments encore requis (les types optionnels ne comptent pas)
 function remainingRequired() { const q = currentQuotas(), o = currentOpt(); return PLAT_TYPES.reduce((a, t) => a + (o[t.key] ? 0 : Math.max(0, q[t.key] - selCountByType(t.key))), 0); }
