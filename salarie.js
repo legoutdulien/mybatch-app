@@ -941,7 +941,7 @@ async function deleteCreneau(id) {
 }
 
 // --- MES RECETTES (proposition -> validation par la tete de reseau) ---
-const CATS_SAL = ['Viande', 'Poisson', 'Végé', 'Poulet', 'Pâtes', 'Cuisine du monde', 'Post partum', 'Sans porc', 'Sans gluten', 'Sans lactose', 'Sucré', 'Tartes', 'Cakes'];
+const CATS_SAL = ['Viande', 'Poisson', 'Végé', 'Vegan', 'Poulet', 'Pâtes', 'Cuisine du monde', 'Post partum', 'Sans porc', 'Sans gluten', 'Sans lactose', 'Sucré', 'Tartes', 'Cakes'];
 let mesRecettesData = [];
 function setupMesRecettes() {
   const t = $('mesRecettesToggle'); if (!t) return;

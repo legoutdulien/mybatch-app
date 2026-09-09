@@ -1228,7 +1228,7 @@ function renderStats() {
 }
 
 // --- RECETTES ---
-const CATS_FIXED = ['Viande', 'Poisson', 'Végé', 'Poulet', 'Pâtes', 'Cuisine du monde', 'Post partum', 'Sans porc', 'Sans gluten', 'Sans lactose', 'Sucré', 'Tartes', 'Cakes'];
+const CATS_FIXED = ['Viande', 'Poisson', 'Végé', 'Vegan', 'Poulet', 'Pâtes', 'Cuisine du monde', 'Post partum', 'Sans porc', 'Sans gluten', 'Sans lactose', 'Sucré', 'Tartes', 'Cakes'];
 let recetteSearch = '';
 let recetteCatFilter = 'all';
 let recetteEtatFilter = 'all';

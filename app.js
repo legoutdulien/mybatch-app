@@ -876,6 +876,7 @@ async function affCreneaux(sem) {
   }
   const [y, mo, d] = sem.id.split('-').map(Number);
   c.innerHTML = '';
+  const today0 = new Date(); today0.setHours(0, 0, 0, 0); // aujourd'hui à minuit : on n'accepte pas de commander pour un jour déjà passé
   const jours = JOURS_ORDER.filter(j => creneauxTemplate.some(t => t.jour === j));
   if (!jours.length) {
     c.innerHTML = '<div class="cph">Aucun creneau disponible cette semaine</div>';
@@ -884,6 +885,7 @@ async function affCreneaux(sem) {
   jours.forEach(j => {
     const jd = new Date(y, mo - 1, d + JMAP_FULL[j]);
     const jl = jd.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+    const passe = jd < today0; // jour dans le passé -> non réservable
     getSlotsForJour(j).forEach(slot => {
       const h = fmtSlotLabel(slot.heure_debut, slot.heure_fin);
       const nomCren = (slot.nom_slot || '').trim();
@@ -892,14 +894,14 @@ async function affCreneaux(sem) {
       const taken = pris.some(p => p.slot_key === slotKey || (p.creneau && p.creneau.trim() === lbl.trim()));
       const ferme = !isActif(j, slot.nom_slot);
       const el = document.createElement('div');
-      el.className = 'citem' + ((taken || ferme) ? ' cpris' : '');
-      const tag = taken ? '<span class="cpris-tag">Indisponible</span>' : ferme ? '<span class="cpris-tag">Ferme</span>' : '';
+      el.className = 'citem' + ((taken || ferme || passe) ? ' cpris' : '');
+      const tag = passe ? '<span class="cpris-tag">Passé</span>' : taken ? '<span class="cpris-tag">Indisponible</span>' : ferme ? '<span class="cpris-tag">Ferme</span>' : '';
       el.innerHTML = `<div class="cjour">${escapeHtml(jl)}</div><div style="display:flex;align-items:center;justify-content:space-between"><span>${nomCren ? escapeHtml(nomCren) + ' · ' : ''}${h}</span>${tag}</div>`;
-      if (!taken && !ferme) {
+      if (!taken && !ferme && !passe) {
         el.addEventListener('click', () => {
           document.querySelectorAll('.citem').forEach(x => x.classList.remove('on'));
           el.classList.add('on');
-          crenSel = { lbl, slotKey };
+          crenSel = { lbl, slotKey, date: jd };
           majBarre();
         });
       }
@@ -908,7 +910,7 @@ async function affCreneaux(sem) {
   });
 }
 
-const CATS_FIXED = ['Viande', 'Poisson', 'Végé', 'Poulet', 'Pâtes', 'Cuisine du monde', 'Post partum', 'Sans porc', 'Sans gluten', 'Sans lactose', 'Sucré', 'Tartes', 'Cakes'];
+const CATS_FIXED = ['Viande', 'Poisson', 'Végé', 'Vegan', 'Poulet', 'Pâtes', 'Cuisine du monde', 'Post partum', 'Sans porc', 'Sans gluten', 'Sans lactose', 'Sucré', 'Tartes', 'Cakes'];
 let platSearch = '';
 let platCatFilter = 'all';
 let platTypeFilter = null; // type courant du filtre (null = auto = 1er type de la formule)
@@ -935,7 +937,9 @@ function forfaitQuotas(f) {
 }
 function currentQuotas() { return forfaitQuotas(forfaitSel); }
 // Types optionnels d'une formule : la cliente peut en prendre de 0 à N (au lieu d'exactement N)
-function forfaitOpt(f) { return f ? { entree: !!f.opt_entree, plat: !!f.opt_plat, dessert: !!f.opt_dessert, petit_plus: !!f.opt_petit_plus } : { entree: false, plat: false, dessert: false, petit_plus: false }; }
+// Réseau : pour un forfait de cuisinière (salarie_id renseigné), les petits plus sont TOUJOURS
+// obligatoires (inclus dans la formule), jamais proposés en option — contrairement à l'espace tête de réseau.
+function forfaitOpt(f) { return f ? { entree: !!f.opt_entree, plat: !!f.opt_plat, dessert: !!f.opt_dessert, petit_plus: f.salarie_id ? false : !!f.opt_petit_plus } : { entree: false, plat: false, dessert: false, petit_plus: false }; }
 function currentOpt() { return forfaitOpt(forfaitSel); }
 // Nombre d'éléments encore requis (les types optionnels ne comptent pas)
 function remainingRequired() { const q = currentQuotas(), o = currentOpt(); return PLAT_TYPES.reduce((a, t) => a + (o[t.key] ? 0 : Math.max(0, q[t.key] - selCountByType(t.key))), 0); }
@@ -1125,6 +1129,13 @@ function voirIngSel(platId) {
 
 function valider() {
   if (!isSelComplete() || !semSel || !crenSel) return;
+  // Garde-fou : jamais de commande pour un jour déjà passé (ex. page restée ouverte après minuit).
+  const t0 = new Date(); t0.setHours(0, 0, 0, 0);
+  if (crenSel.date && new Date(crenSel.date) < t0) {
+    alert('Ce créneau est déjà passé. Merci de choisir une autre date.');
+    crenSel = null; if (semSel) affCreneaux(semSel); majBarre();
+    return;
+  }
   afficherRecap();
 }
 
